@@ -99,7 +99,7 @@ def validate_csv_schema(csv_content: str, dataset: str) -> SchemaValidationRespo
                 issue=f"Schema não encontrado para dataset '{dataset}'",
                 suggestion=f"Crie {schema_path}"
             ))
-            return SchemaValidationResponse(valid=False, errors=errors)
+            return SchemaValidationResponse(valid=False, errors=errors, rows_preview=0)
         
         with open(schema_path) as f:
             schema = json.load(f)
@@ -115,7 +115,7 @@ def validate_csv_schema(csv_content: str, dataset: str) -> SchemaValidationRespo
                 issue="CSV vazio ou mal formatado",
                 suggestion="Verifique se o CSV tem headers e dados"
             ))
-            return SchemaValidationResponse(valid=False, errors=errors)
+            return SchemaValidationResponse(valid=False, errors=errors, rows_preview=0)
         
         csv_columns = set(reader.fieldnames)
         schema_column_names = set(schema_columns.keys())
@@ -157,7 +157,7 @@ def validate_csv_schema(csv_content: str, dataset: str) -> SchemaValidationRespo
             issue=f"Erro ao processar CSV: {str(e)}",
             suggestion="Verifique se o arquivo é um CSV válido com delimitador ;"
         ))
-        return SchemaValidationResponse(valid=False, errors=errors)
+        return SchemaValidationResponse(valid=False, errors=errors, rows_preview=0)
 
 
 # ============================================================================

@@ -106,7 +106,15 @@ RESPOSTA (UMA frase usando o número {formatted_result}):"""
         return insight
     
     except Exception as e:
-        logger.error(f"❌ Erro ao interpretar resultado: {e}")
+        error_str = str(e)
+        
+        # Tratamento específico para Ollama 500
+        if "500" in error_str and "11434" in error_str:
+            logger.warning(f"⚠️ Ollama retornou erro 500. Usando fallback...")
+            logger.warning("Dica: Verifique se Ollama está rodando com: docker ps | grep ollama")
+        else:
+            logger.error(f"❌ Erro ao interpretar resultado: {e}")
+        
         # Retornar resultado cru se LLM falhar
         if isinstance(result, list) and len(result) > 0:
             if len(result) == 1 and len(result[0]) == 1:
