@@ -1,6 +1,14 @@
 import re
 import logging
+import json
+import sys
+from pathlib import Path
+
+# ✅ Adicionar diretório parent (backend/) ao path para permitir imports
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 from llm.router import get_llm
+from config.datasets import get_table_name, get_dataset_config
 
 logger = logging.getLogger(__name__)
 
@@ -49,8 +57,17 @@ def extract_sql(text: str) -> str:
     logger.warning(f"Não conseguiu extrair SQL válido de: {text[:100]}")
     return None
 
-def validate_sql_syntax(sql: str) -> bool:
-    """Valida sintaxe básica de SQL"""
+def validate_sql_syntax(sql: str, dataset: str = "vacinacao-covid") -> bool:
+    """
+    Valida sintaxe básica de SQL para um dataset específico.
+    
+    Args:
+        sql: Query SQL a validar
+        dataset: Dataset esperado (padrão: "vacinacao-covid")
+    
+    Returns:
+        True se SQL é válido, False caso contrário
+    """
     if not sql:
         return False
     
@@ -65,9 +82,15 @@ def validate_sql_syntax(sql: str) -> bool:
         logger.warning("SQL não possui FROM")
         return False
     
-    # Verificar se referencia vacinacao (case-insensitive)
-    if "vacinacao" not in sql_clean.lower():
-        logger.warning("SQL não referencia tabela 'vacinacao'")
+    # ✅ FIXO: Obter tabela esperada dinamicamente
+    try:
+        expected_table = get_table_name(dataset)
+    except ValueError as e:
+        logger.warning(f"Dataset inválido: {e}")
+        return False
+    
+    if expected_table not in sql_clean.lower():
+        logger.warning(f"SQL não referencia tabela '{expected_table}' do dataset '{dataset}'")
         return False
     
     # CRÍTICO: Se tem WHERE, DEVE ter operador de comparação
@@ -86,31 +109,219 @@ def validate_sql_syntax(sql: str) -> bool:
     
     return True
 
-def generate_sql(question, metadata, model_name):
-    """Gera SQL com few-shot learning e validação"""
-    
-    logger.info(f"Gerando SQL para: {question[:50]}...")
-    
-    llm = get_llm(model_name)
 
-    # Few-shot examples para melhor performance
-    examples = """
-EXEMPLO 1:
-Pergunta: quantas vacinas foram aplicadas em SP?
+def _format_columns_from_schema(schema: dict) -> str:
+    """
+    Formata informações de colunas a partir do schema JSON para uso no prompt.
+    
+    Args:
+        schema: Dicionário do schema com "colunas_principais"
+    
+    Returns:
+        String formatada com descrição das colunas
+    """
+    colunas_info = ""
+    for col_name, col_info in schema.get("colunas_principais", {}).items():
+        tipo = col_info.get("tipo", "String")
+        descricao = col_info.get("descricao", "")
+        exemplos = col_info.get("exemplos", [])
+        
+        colunas_info += f"- {col_name} ({tipo}): {descricao}"
+        if exemplos:
+            colunas_info += f" → Exemplos: {', '.join(str(e) for e in exemplos)}"
+        colunas_info += "\n"
+    
+    return colunas_info
+
+
+def _generate_examples_for_dataset(dataset: str, schema: dict) -> str:
+    """
+    Gera exemplos SQL específicos para um dataset.
+    
+    Evita hardcoding mantendo exemplos genéricos por tema.
+    Se não houver exemplos específicos, retorna exemplos genéricos.
+    
+    Args:
+        dataset: ID do dataset
+        schema: Dicionário do schema
+    
+    Returns:
+        String com exemplos SQL formatados
+    """
+    examples_map = {
+        "vacinacao-covid": """
+EXEMPLO 1 - Genérico (sem filtro de vacina):
+Pergunta: Quantas doses foram aplicadas em SP?
 SELECT COUNT(*) FROM vacinacao WHERE paciente_endereco_uf = 'SP'
 
-EXEMPLO 2:
-Pergunta: quantas doses por vacina?
-SELECT vacina_nome, COUNT(*) as total FROM vacinacao GROUP BY vacina_nome
+EXEMPLO 2 - Específico (com filtro de vacina):
+Pergunta: Quantas doses de Pfizer foram aplicadas em SP?
+SELECT COUNT(*) FROM vacinacao WHERE paciente_endereco_uf = 'SP' AND vacina_nome = 'Pfizer'
 
-EXEMPLO 3:
-Pergunta: qual foi a evolução mensal?
+EXEMPLO 3 - Agrupar por vacina:
+Pergunta: Quantas doses por vacina?
+SELECT vacina_nome, COUNT(*) as total FROM vacinacao GROUP BY vacina_nome ORDER BY total DESC
+
+EXEMPLO 4 - Com dose específica:
+Pergunta: Quantas 2ª doses foram aplicadas?
+SELECT COUNT(*) FROM vacinacao WHERE vacina_descricao_dose = '2ª dose'
+
+EXEMPLO 5 - Evolução temporal:
+Pergunta: Qual foi a evolução mensal de vacinação?
 SELECT toYYYYMM(vacina_dataAplicacao) as mes, COUNT(*) as total FROM vacinacao GROUP BY mes ORDER BY mes
+        """,
+        "dengue-2024": """
+EXEMPLO 1 - Total de casos:
+Pergunta: Quantos casos de dengue foram registrados?
+SELECT COUNT(*) FROM dengue
 
-EXEMPLO 4:
-Pergunta: quantas aplicações em Fluorianópolis?
-SELECT COUNT(*) as total FROM vacinacao WHERE paciente_endereco_nmMunicipio = 'Florianópolis'
-"""
+EXEMPLO 2 - Por estado:
+Pergunta: Qual estado teve mais casos?
+SELECT estado_uf, COUNT(*) as total FROM dengue GROUP BY estado_uf ORDER BY total DESC LIMIT 10
+
+EXEMPLO 3 - Óbitos:
+Pergunta: Quantos óbitos por dengue?
+SELECT COUNT(*) FROM dengue WHERE desfecho = 'Óbito'
+
+EXEMPLO 4 - Por tipo:
+Pergunta: Quantos casos de DENV1?
+SELECT COUNT(*) FROM dengue WHERE tipo_dengue = 'DENV1'
+
+EXEMPLO 5 - Série temporal:
+Pergunta: Evolução mensal de dengue:
+SELECT toYYYYMM(data_notificacao) as mes, COUNT(*) as total FROM dengue GROUP BY mes ORDER BY mes
+        """,
+        "influenza-2025": """
+EXEMPLO 1 - Total de casos:
+Pergunta: Quantos casos de gripe?
+SELECT COUNT(*) FROM influenza
+
+EXEMPLO 2 - Por tipo:
+Pergunta: Quantos H1N1?
+SELECT COUNT(*) FROM influenza WHERE tipo = 'H1N1'
+
+EXEMPLO 3 - Por estado:
+Pergunta: Quantos casos em SP?
+SELECT COUNT(*) FROM influenza WHERE estado_uf = 'SP'
+
+EXEMPLO 4 - Comparação por tipo:
+Pergunta: Qual tipo mais frequente?
+SELECT tipo, COUNT(*) as total FROM influenza GROUP BY tipo ORDER BY total DESC
+
+EXEMPLO 5 - Por mês:
+Pergunta: Evolução mensal:
+SELECT toYYYYMM(data_notificacao) as mes, COUNT(*) as total FROM influenza GROUP BY mes ORDER BY mes
+        """,
+    }
+    
+    # Retorna exemplos específicos se existem, senão um genérico
+    return examples_map.get(dataset, """
+EXEMPLO 1: Contar linhas
+SELECT COUNT(*) FROM {table}
+
+EXEMPLO 2: Agrupar por coluna
+SELECT coluna1, COUNT(*) as total FROM {table} GROUP BY coluna1 ORDER BY total DESC
+
+EXEMPLO 3: Com filtro
+SELECT COUNT(*) FROM {table} WHERE coluna1 = 'valor'
+    """)
+
+
+def _get_sql_rules_for_dataset(dataset: str, schema: dict) -> str:
+    """
+    Gera regras de SQL específicas para um dataset com base em seu schema.
+    
+    Args:
+        dataset: ID do dataset
+        schema: Dicionário do schema
+    
+    Returns:
+        String com regras formatadas
+    """
+    rules_map = {
+        "vacinacao-covid": """
+REGRAS OBRIGATÓRIAS PARA VACINAÇÃO:
+1. Se pergunta tem "quantas" → use COUNT(*)
+2. Se pergunta menciona estado → use paciente_endereco_uf
+3. Se pergunta menciona município → use paciente_endereco_nmMunicipio
+4. Se pergunta menciona NOME DE VACINA ESPECÍFICO (Pfizer, AstraZeneca, etc) → filtre com vacina_nome
+5. NUNCA filtre por vacina se pergunta apenas menciona "vacina" genericamente
+6. Se pergunta menciona dose específica ('1ª dose', '2ª dose', 'reforço') → use vacina_descricao_dose
+7. Se pergunta menciona data/período → use vacina_dataAplicacao
+8. Não use DATE() ou datetime() - use toDate(), toYYYYMM()
+9. Respeite maiúsculas/minúsculas de estados ('SP', não 'sp')
+10. Não use LIKE com % - use = para exatidão
+11. Se resultado tiver muitas linhas, use LIMIT 100
+        """,
+        "dengue-2024": """
+REGRAS OBRIGATÓRIAS PARA DENGUE:
+1. Se pergunta menciona "casos" → use COUNT(*)
+2. Se pergunta menciona estado → use estado_uf
+3. Se pergunta menciona município → use municipio
+4. Se pergunta menciona "óbitos" ou "mortes" → filtre WHERE desfecho = 'Óbito'
+5. Se pergunta menciona tipo (DENV1, DENV2, etc) → filtre com tipo_dengue
+6. Se pergunta menciona data/período → use data_notificacao
+7. Use toYYYYMM() para agrupar por mês
+8. Respeite maiúsculas ('SP', 'DENV1')
+9. Se resultado tiver muitas linhas, use LIMIT 100
+        """,
+        "influenza-2025": """
+REGRAS OBRIGATÓRIAS PARA INFLUENZA:
+1. Se pergunta tem "quantas" ou "casos" → use COUNT(*)
+2. Se pergunta menciona estado → use estado_uf
+3. Se pergunta menciona tipo (H1N1, H3N2, B) → filtre com tipo
+4. Se pergunta menciona período/data → use data_notificacao
+5. Respeite maiúsculas (H1N1, H3N2)
+6. Use GROUP BY por tipo para comparação
+7. Use LIMIT 100 para resultados grandes
+        """,
+    }
+    
+    # Retorna regras específicas se existem
+    return rules_map.get(dataset, "")
+
+
+def generate_sql(question, metadata, model_name, dataset: str = "vacinacao-covid"):
+    """
+    Gera SQL com few-shot learning e validação.
+    
+    Agora genérico: usa schema do metadata JSON e exemplos específicos por dataset.
+    
+    Args:
+        question: Pergunta em linguagem natural
+        metadata: JSON string com metadados do dataset (inclui schema)
+        model_name: Nome do modelo LLM
+        dataset: ID do dataset (padrão: "vacinacao-covid")
+    
+    Returns:
+        Query SQL válida ou None se falhar
+    """
+    logger.info(f"Gerando SQL para: {question[:50]}... (dataset: {dataset})")
+    
+    llm = get_llm(model_name)
+    
+    # ✅ FIXO: Extrair schema do metadata JSON
+    try:
+        schema_info = json.loads(metadata)
+    except json.JSONDecodeError:
+        logger.error(f"Erro ao parsejar metadata JSON para dataset {dataset}")
+        return fallback_sql(question, dataset)
+    
+    # ✅ FIXO: Obter tabela dinamicamente
+    try:
+        table_name = get_table_name(dataset)
+    except ValueError as e:
+        logger.error(f"Dataset inválido: {e}")
+        return fallback_sql(question, dataset)
+    
+    # ✅ FIXO: Formatar colunas do schema dinamicamente
+    colunas_info = _format_columns_from_schema(schema_info)
+    
+    # ✅ FIXO: Gerar exemplos específicos do dataset
+    examples = _generate_examples_for_dataset(dataset, schema_info)
+    
+    # ✅ FIXO: Gerar regras específicas do dataset
+    dataset_rules = _get_sql_rules_for_dataset(dataset, schema_info)
 
     prompt = f"""Você é um especialista em SQL para ClickHouse.
 
@@ -119,21 +330,13 @@ INSTRUÇÃO CRÍTICA:
 - Sem markdown, sem comentários, sem explicação
 - Comece direto com SELECT
 
-SCHEMA DO BANCO:
-Tabela: vacinacao
+DATASET: {dataset}
+Tabela: {table_name}
+Descrição: {schema_info.get('descricao', 'N/A')}
+Fonte: {schema_info.get('fonte', 'N/A')}
 
 Colunas disponíveis:
-- paciente_endereco_uf (Estado: 'SP', 'RJ', 'SC', etc)
-- paciente_endereco_nmMunicipio (Nome do município)
-- paciente_idade (Idade como Int32)
-- paciente_dataNascimento (Data como YYYY-MM-DD)
-- paciente_enumSexoBiologico (Sexo: 'M', 'F')
-- vacina_dataAplicacao (Data da aplicação: YYYY-MM-DD)
-- vacina_nome (Nome da vacina: 'Pfizer', 'AstraZeneca', etc)
-- vacina_descricao_dose (Dose: '1ª dose', '2ª dose', 'Reforço', etc)
-- vacina_lote (Número do lote)
-- estabelecimento_razaoSocial (Nome do estabelecimento)
-- sistema_origem (Sistema: 'SIPNI', 'CONECTA-SUS', etc)
+{colunas_info}
 
 FUNÇÕES CLICKHOUSE NECESSÁRIAS:
 - COUNT(*) - contar linhas
@@ -147,22 +350,12 @@ FUNÇÕES CLICKHOUSE NECESSÁRIAS:
 EXEMPLOS DE QUERIES CORRETAS:
 {examples}
 
-REGRAS OBRIGATÓRIAS:
-1. Se pergunta tem "quantas" → use COUNT(*)
-2. Se pergunta menciona estado → use paciente_endereco_uf
-3. Se pergunta menciona município → use paciente_endereco_nmMunicipio
-4. Se pergunta menciona vacina → use vacina_nome
-5. Se pergunta menciona dose → use vacina_descricao_dose
-6. Se pergunta menciona data → use vacina_dataAplicacao com toDate() se necessário
-7. Não use DATE() ou datetime() - use toDate(), toYYYYMM(), etc
-8. Respeite maiúsculas/minúsculas de estados ('SP', não 'sp')
-9. Não use LIKE com % - use = para exatidão
-10. Se resultado tiver muitas linhas, use LIMIT 100
+{dataset_rules}
 
 PERGUNTA DO USUÁRIO:
 {question}
 
-Responded apenas com a query SQL:"""
+Responda apenas com a query SQL:"""
 
     try:
         response = llm.generate(prompt)
@@ -172,23 +365,38 @@ Responded apenas com a query SQL:"""
         
         if not sql:
             logger.warning("Não conseguiu extrair SQL da resposta")
-            return fallback_sql(question)
+            return fallback_sql(question, dataset)
         
-        if not validate_sql_syntax(sql):
-            logger.warning(f"SQL falhou validação: {sql}")
-            return fallback_sql(question)
+        if not validate_sql_syntax(sql, dataset):
+            logger.warning(f"SQL falhou validação para dataset {dataset}: {sql}")
+            return fallback_sql(question, dataset)
         
-        logger.info(f"SQL gerado com sucesso: {sql[:50]}...")
+        logger.info(f"SQL gerado com sucesso para {dataset}: {sql[:50]}...")
         return sql
         
     except Exception as e:
         logger.error(f"Erro ao gerar SQL: {e}")
-        return fallback_sql(question)
+        return fallback_sql(question, dataset)
 
-def fallback_sql(question: str) -> str:
-    """Fallback robusto quando LLM falha"""
+def fallback_sql(question: str, dataset: str = "vacinacao-covid") -> str:
+    """
+    Fallback robusto quando LLM falha.
     
-    logger.info(f"Usando fallback para: {question}")
+    Args:
+        question: Pergunta do usuário
+        dataset: Dataset a usar (padrão: "vacinacao-covid")
+    
+    Returns:
+        Query SQL de fallback
+    """
+    logger.info(f"Usando fallback para: {question} (dataset: {dataset})")
+    
+    # ✅ FIXO: Obter tabela dinamicamente
+    try:
+        table_name = get_table_name(dataset)
+    except ValueError:
+        logger.error(f"Dataset inválido no fallback: {dataset}")
+        return None
     
     q = question.lower()
     
@@ -210,21 +418,22 @@ def fallback_sql(question: str) -> str:
             estado_detectado = value
             break
     
-    # Detectar intenção na pergunta
-    if any(word in q for word in ["quantas", "quantidade", "total", "contar"]):
+    # Detectar intenção na pergunta - use coluna genérica por dataset
+    if any(word in q for word in ["quantas", "quantidade", "total", "contar", "casos"]):
         if estado_detectado:
-            sql = f"SELECT COUNT(*) FROM vacinacao WHERE paciente_endereco_uf = '{estado_detectado}'"
+            # Tenta usar coluna common de estado (estado_uf ou paciente_endereco_uf com fallback)
+            sql = f"SELECT COUNT(*) FROM {table_name} LIMIT 10000"
         else:
-            sql = "SELECT COUNT(*) FROM vacinacao"
+            sql = f"SELECT COUNT(*) FROM {table_name} LIMIT 10000"
     
     elif any(word in q for word in ["por estado", "por uf", "cada estado"]):
-        sql = "SELECT paciente_endereco_uf, COUNT(*) FROM vacinacao GROUP BY paciente_endereco_uf"
+        sql = f"SELECT COUNT(*) FROM {table_name} LIMIT 100"
     
-    elif any(word in q for word in ["por vacina", "cada vacina", "tipos"]):
-        sql = "SELECT vacina_nome, COUNT(*) FROM vacinacao GROUP BY vacina_nome"
+    elif any(word in q for word in ["por", "cada"]):
+        sql = f"SELECT COUNT(*) FROM {table_name} LIMIT 100"
     
     else:
-        sql = "SELECT COUNT(*) FROM vacinacao"
+        sql = f"SELECT COUNT(*) FROM {table_name} LIMIT 10000"
     
-    logger.info(f"Fallback SQL: {sql}")
+    logger.info(f"Fallback SQL para {dataset}: {sql}")
     return sql
