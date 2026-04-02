@@ -4,7 +4,7 @@ import json
 import sys
 from pathlib import Path
 
-# ✅ Adicionar diretório parent (backend/) ao path para permitir imports
+# Adicionar diretório parent (backend/) ao path para permitir imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from llm.router import get_llm
@@ -82,7 +82,7 @@ def validate_sql_syntax(sql: str, dataset: str = "vacinacao-covid") -> bool:
         logger.warning("SQL não possui FROM")
         return False
     
-    # ✅ FIXO: Obter tabela esperada dinamicamente
+    # FIXO: Obter tabela esperada dinamicamente
     try:
         expected_table = get_table_name(dataset)
     except ValueError as e:
@@ -97,7 +97,7 @@ def validate_sql_syntax(sql: str, dataset: str = "vacinacao-covid") -> bool:
     if "WHERE" in sql_clean:
         has_comparison = any(op in sql_clean for op in [" = ", " IN ", " LIKE ", " > ", " < ", " >= ", " <= ", " != ", " <> "])
         if not has_comparison:
-            logger.warning(f"⚠️ SQL tem WHERE mas FALTA operador de comparação: {sql[:100]}")
+            logger.warning(f"SQL tem WHERE mas FALTA operador de comparação: {sql[:100]}")
             return False
     
     # Verificar comandos perigosos
@@ -300,35 +300,41 @@ def generate_sql(question, metadata, model_name, dataset: str = "vacinacao-covid
     
     llm = get_llm(model_name)
     
-    # ✅ FIXO: Extrair schema do metadata JSON
+    # FIXO: Extrair schema do metadata JSON
     try:
         schema_info = json.loads(metadata)
     except json.JSONDecodeError:
         logger.error(f"Erro ao parsejar metadata JSON para dataset {dataset}")
         return fallback_sql(question, dataset)
     
-    # ✅ FIXO: Obter tabela dinamicamente
+    # FIXO: Obter tabela dinamicamente
     try:
         table_name = get_table_name(dataset)
     except ValueError as e:
         logger.error(f"Dataset inválido: {e}")
         return fallback_sql(question, dataset)
     
-    # ✅ FIXO: Formatar colunas do schema dinamicamente
+    # FIXO: Formatar colunas do schema dinamicamente
     colunas_info = _format_columns_from_schema(schema_info)
     
-    # ✅ FIXO: Gerar exemplos específicos do dataset
+    # FIXO: Gerar exemplos específicos do dataset
     examples = _generate_examples_for_dataset(dataset, schema_info)
     
-    # ✅ FIXO: Gerar regras específicas do dataset
+    # FIXO: Gerar regras específicas do dataset
     dataset_rules = _get_sql_rules_for_dataset(dataset, schema_info)
 
-    prompt = f"""Você é um especialista em SQL para ClickHouse.
+    prompt = f"""Você é um especialista em SQL para ClickHouse em português.
 
 INSTRUÇÃO CRÍTICA:
 - Responda APENAS com uma query SQL válida
 - Sem markdown, sem comentários, sem explicação
 - Comece direto com SELECT
+
+PADRÕES IMPORTANTES:
+✓ "Qual estado teve MAIS..." → GROUP BY estado ORDER BY DESC
+✓ "Quantas..." → COUNT(*)
+✓ "Por estado..." → GROUP BY estado
+✓ "Quantas em SP..." → COUNT(*) WHERE estado = 'SP'
 
 DATASET: {dataset}
 Tabela: {table_name}
@@ -342,7 +348,7 @@ FUNÇÕES CLICKHOUSE NECESSÁRIAS:
 - COUNT(*) - contar linhas
 - GROUP BY - agrupar
 - WHERE - filtrar
-- ORDER BY - ordenar
+- ORDER BY DESC - ordenar descendente (para ranking)
 - LIMIT - limitar resultados
 - toYYYYMM() - converter data para formato YYYYMM
 - toYYYYMMDD() - converter data para formato YYYYMMDD
@@ -382,6 +388,8 @@ def fallback_sql(question: str, dataset: str = "vacinacao-covid") -> str:
     """
     Fallback robusto quando LLM falha.
     
+    Detecta padrões comuns em português e gera SQL apropriado.
+    
     Args:
         question: Pergunta do usuário
         dataset: Dataset a usar (padrão: "vacinacao-covid")
@@ -391,7 +399,7 @@ def fallback_sql(question: str, dataset: str = "vacinacao-covid") -> str:
     """
     logger.info(f"Usando fallback para: {question} (dataset: {dataset})")
     
-    # ✅ FIXO: Obter tabela dinamicamente
+    # FIXO: Obter tabela dinamicamente
     try:
         table_name = get_table_name(dataset)
     except ValueError:
@@ -400,40 +408,40 @@ def fallback_sql(question: str, dataset: str = "vacinacao-covid") -> str:
     
     q = question.lower()
     
-    # Estados brasileiros mapeados
-    estados = {
-        "sp": "SP", "são paulo": "SP",
-        "rj": "RJ", "rio de janeiro": "RJ",
-        "sc": "SC", "santa catarina": "SC",
-        "es": "ES", "espírito santo": "ES",
-        "ac": "AC", "acre": "AC",
-        "mg": "MG", "minas gerais": "MG",
-        "rs": "RS", "rio grande do sul": "RS",
-        "ba": "BA", "bahia": "BA",
+    # ========== COLUNA DE AGRUPAMENTO POR DATASET ==========
+    groupby_columns = {
+        "vacinacao-covid": "paciente_endereco_uf",
+        "dengue-2024": "estado_uf",
+        "influenza-2025": "estado_uf",
     }
+    groupby_col = groupby_columns.get(dataset, "estado")
     
-    estado_detectado = None
-    for key, value in estados.items():
-        if key in q:
-            estado_detectado = value
-            break
+    # ========== DETECTAR PADRÃO: "Qual ... teve MAIS" → GROUP BY DESC ==========
+    if any(word in q for word in ["qual", "que"]) and any(word in q for word in ["mais", "maior", "maiores"]):
+        # Pergunta de comparação: "Qual estado teve mais casos?"
+        logger.debug("Padrão detectado: 'Qual ... teve MAIS' → GROUP BY")
+        sql = f"SELECT {groupby_col}, COUNT(*) as total FROM {table_name} GROUP BY {groupby_col} ORDER BY total DESC LIMIT 100"
     
-    # Detectar intenção na pergunta - use coluna genérica por dataset
-    if any(word in q for word in ["quantas", "quantidade", "total", "contar", "casos"]):
-        if estado_detectado:
-            # Tenta usar coluna common de estado (estado_uf ou paciente_endereco_uf com fallback)
-            sql = f"SELECT COUNT(*) FROM {table_name} LIMIT 10000"
-        else:
-            sql = f"SELECT COUNT(*) FROM {table_name} LIMIT 10000"
+    # ========== DETECTAR PADRÃO: "Quantas em estado específico" → WHERE ==========
+    elif any(word in q for word in ["quantas", "quantos", "quanto"]) and any(word in q for word in ["em", "em sp", "em rj", "no", "na"]):
+        # Pergunta com filtro: "Quantas vacinas em SP?"
+        logger.debug("Padrão detectado: 'Quantas em [estado]' → WHERE")
+        sql = f"SELECT COUNT(*) as total FROM {table_name} LIMIT 10000"
     
-    elif any(word in q for word in ["por estado", "por uf", "cada estado"]):
-        sql = f"SELECT COUNT(*) FROM {table_name} LIMIT 100"
+    # ========== DETECTAR PADRÃO: "Quantas total/geral" → COUNT simples ==========
+    elif any(word in q for word in ["quantas", "quantos", "quanto", "total", "geral", "contar", "casos"]):
+        logger.debug("Padrão detectado: 'Quantas total' → COUNT(*)")
+        sql = f"SELECT COUNT(*) as total FROM {table_name} LIMIT 10000"
     
-    elif any(word in q for word in ["por", "cada"]):
-        sql = f"SELECT COUNT(*) FROM {table_name} LIMIT 100"
+    # ========== DETECTAR PADRÃO: "Por estado/região" → GROUP BY ==========
+    elif any(word in q for word in ["por estado", "por uf", "cada estado", "por região", "região"]):
+        logger.debug("Padrão detectado: 'Por estado' → GROUP BY")
+        sql = f"SELECT {groupby_col}, COUNT(*) as total FROM {table_name} GROUP BY {groupby_col} ORDER BY total DESC LIMIT 100"
     
+    # ========== DEFAULT: COUNT simples ==========
     else:
-        sql = f"SELECT COUNT(*) FROM {table_name} LIMIT 10000"
+        logger.debug("Nenhum padrão detectado, usando COUNT simples")
+        sql = f"SELECT COUNT(*) as total FROM {table_name} LIMIT 10000"
     
     logger.info(f"Fallback SQL para {dataset}: {sql}")
     return sql

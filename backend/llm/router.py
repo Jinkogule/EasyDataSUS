@@ -44,7 +44,7 @@ def get_llm(model_name: str = "deepseek-local"):
     
     # Usar deepseek como padrão
     if model_name not in MODELS:
-        print(f"⚠️ Modelo '{model_name}' desconhecido. Usando 'deepseek-local'")
+        print(f"Modelo '{model_name}' desconhecido. Usando 'deepseek-local'")
         model_name = "deepseek-local"
     
     ollama_model = MODELS[model_name]["model"]

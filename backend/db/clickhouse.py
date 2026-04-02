@@ -29,10 +29,10 @@ def get_client():
         )
         # Testa a conexão
         client.query("SELECT 1")
-        logger.info("✅ Conexão com ClickHouse estabelecida")
+        logger.info("Conexão com ClickHouse estabelecida")
         return client
     except Exception as e:
-        logger.error(f"❌ Erro ao conectar ao ClickHouse: {e}")
+        logger.error(f"Erro ao conectar ao ClickHouse: {e}")
         raise
 
 def run_query(sql: str, retry_count: int = 3):
@@ -44,11 +44,11 @@ def run_query(sql: str, retry_count: int = 3):
         try:
             client = get_client()
             result = client.query(sql)
-            logger.info(f"✅ Query executada com sucesso. Linhas: {len(result.result_rows)}")
+            logger.info(f"Query executada com sucesso. Linhas: {len(result.result_rows)}")
             return result.result_rows
         
         except Exception as e:
-            logger.error(f"❌ Erro na query (tentativa {attempt + 1}/{retry_count}): {e}")
+            logger.error(f"Erro na query (tentativa {attempt + 1}/{retry_count}): {e}")
             
             # Limpa cache após erro para reconectar
             if attempt < retry_count - 1:

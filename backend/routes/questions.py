@@ -24,7 +24,7 @@ router = APIRouter()
 
 PREBUILT_QUESTIONS = {
     "vacinacao-covid": {
-        "theme_color": "🩹",
+        "theme_color": "",
         "theme_name": "Vacinação COVID-19",
         "description": "Dados de vacinação contra COVID-19 no Brasil",
         "questions": [
@@ -67,7 +67,7 @@ PREBUILT_QUESTIONS = {
     },
     
     "dengue-2024": {
-        "theme_color": "🦟",
+        "theme_color": "",
         "theme_name": "Dengue 2024",
         "description": "Casos de Dengue registrados em 2024",
         "questions": [
@@ -110,7 +110,7 @@ PREBUILT_QUESTIONS = {
     },
     
     "influenza-2025": {
-        "theme_color": "🦠",
+        "theme_color": "",
         "theme_name": "Influenza 2025",
         "description": "Casos de Influenza registrados em 2025",
         "questions": [
@@ -205,7 +205,7 @@ def list_all_questions(
       "datasets": [
         {
           "dataset_id": "vacinacao-covid",
-          "theme_color": "🩹",
+          "theme_color": "",
           "theme_name": "Vacinação COVID-19",
           "description": "Dados de vacinação...",
           "question_count": 5,
@@ -267,7 +267,7 @@ def get_dataset_questions(dataset_id: str):
     ```json
     {
       "dataset_id": "vacinacao-covid",
-      "theme_color": "🩹",
+      "theme_color": "",
       "theme_name": "Vacinação COVID-19",
       "description": "...",
       "question_count": 5,
@@ -426,7 +426,7 @@ def detect_dataset_for_question(question: str = Query(..., description="Pergunta
         "confidence": float(confidence),
         "score": int(best_score),
         "alternatives": sorted(alternatives, key=lambda x: x["score"], reverse=True),
-        "message": "✅ Dataset detectado" if best_score > 0 else "⚠️ Dataset não detectado com confiança"
+        "message": "Dataset detectado" if best_score > 0 else "Dataset não detectado com confiança"
     }
 
 

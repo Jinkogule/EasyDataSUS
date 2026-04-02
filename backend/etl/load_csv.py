@@ -5,7 +5,7 @@ from datetime import datetime
 from pathlib import Path
 import subprocess
 
-# ✅ Adicionar diretório parent (backend/) ao path para permitir imports
+# Adicionar diretório parent (backend/) ao path para permitir imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import clickhouse_connect
@@ -29,10 +29,10 @@ def get_clickhouse_client():
             password="admin",
             database="default"
         )
-        logger.info("✅ Conectado ao ClickHouse")
+        logger.info("Conectado ao ClickHouse")
         return client
     except Exception as e:
-        logger.error(f"❌ Erro ao conectar ao ClickHouse: {e}")
+        logger.error(f"Erro ao conectar ao ClickHouse: {e}")
         sys.exit(1)
 
 def table_exists(client, dataset: str = "vacinacao-covid"):
@@ -89,41 +89,41 @@ def load_csv(csv_path: str = None, dataset: str = "vacinacao-covid"):
         base_path = Path(__file__).parent.parent / "data" / "datasets" / dataset
         csv_files = sorted(list(base_path.glob("*.csv")))
         if not csv_files:
-            logger.error(f"❌ Nenhum arquivo CSV encontrado em {base_path}")
+            logger.error(f"Nenhum arquivo CSV encontrado em {base_path}")
             sys.exit(1)
-        logger.info(f"📂 Encontrados {len(csv_files)} arquivo(s) CSV no dataset '{dataset}':")
+        logger.info(f"Encontrados {len(csv_files)} arquivo(s) CSV no dataset '{dataset}':")
         for f in csv_files:
             logger.info(f"   • {f.name}")
     else:
         # Arquivo customizado específico
         custom_file = Path(csv_path)
         if not custom_file.exists():
-            logger.error(f"❌ Arquivo não encontrado: {csv_path}")
+            logger.error(f"Arquivo não encontrado: {csv_path}")
             sys.exit(1)
         csv_files = [custom_file]
     
     client = get_clickhouse_client()
     
-    # ✅ FIXO: Obter nome da tabela dinamicamente
+    # FIXO: Obter nome da tabela dinamicamente
     try:
         table_name = get_table_name(dataset)
     except ValueError as e:
-        logger.error(f"❌ {e}")
+        logger.error(f"Dataset error - {e}")
         sys.exit(1)
     
-    # ✅ FIXO: Verificar se tabela existe (usando tabela dinâmica)
+    # FIXO: Verificar se tabela existe (usando tabela dinâmica)
     if not table_exists(client, dataset):
-        logger.error(f"❌ Tabela '{table_name}' não existe. Execute o init.sql primeiro.")
+        logger.error(f"Table error - Table '{table_name}' não existe. Execute o init.sql primeiro.")
         sys.exit(1)
     
-    # ✅ FIXO: Limpar dados antigos quando carregando múltiplos arquivos (tabela dinâmica)
+    # FIXO: Limpar dados antigos quando carregando múltiplos arquivos (tabela dinâmica)
     if len(csv_files) > 1 or csv_path is None:
-        logger.info("🗑️  Limpando dados antigos da tabela...")
+        logger.info("Limpando dados antigos da tabela...")
         try:
             client.command(f"TRUNCATE TABLE {table_name}")
-            logger.info("✅ Tabela limpa - pronta para novos dados")
+            logger.info("Tabela limpa - pronta para novos dados")
         except Exception as e:
-            logger.warning(f"⚠️  Não conseguiu limpar tabela (pode estar vazia): {e}")
+            logger.warning(f"Não conseguiu limpar tabela (pode estar vazia): {e}")
     
     # ========================================================================
     # CARREGAR TODOS OS ARQUIVOS
@@ -133,10 +133,10 @@ def load_csv(csv_path: str = None, dataset: str = "vacinacao-covid"):
     
     try:
         for file_idx, csv_file in enumerate(csv_files, 1):
-            logger.info(f"\n📂 [{file_idx}/{len(csv_files)}] Carregando: {csv_file.name}")
+            logger.info(f"\n[{file_idx}/{len(csv_files)}] Carregando: {csv_file.name}")
             
             # Ler CSV e converter para TSV
-            logger.info("📝 Convertendo CSV para TSV...")
+            logger.info("Convertendo CSV para TSV...")
             tsv_lines = []
             row_count = 0
             error_count = 0
@@ -228,19 +228,19 @@ def load_csv(csv_path: str = None, dataset: str = "vacinacao-covid"):
                         row_count += 1
                         
                         if idx % 10000 == 0:
-                            logger.info(f"  📥 {idx} linhas lidas... ({row_count} parsed)")
+                            logger.info(f"  {idx} linhas lidas... ({row_count} parsed)")
                     
                     except Exception as e:
                         error_count += 1
                         if error_count <= 5:
-                            logger.warning(f"  ⚠️ Erro na linha {idx}: {e}")
+                            logger.warning(f"Erro na linha {idx}: {e}")
             
-            logger.info(f"✅ CSV convertido: {row_count} linhas válidas, {error_count} erros")
+            logger.info(f"CSV convertido: {row_count} linhas válidas, {error_count} erros")
             total_rows_all += row_count
             total_errors_all += error_count
             
             if row_count == 0:
-                logger.warning(f"⚠️  Nenhuma linha válida em {csv_file.name} - pulando arquivo")
+                logger.warning(f"Nenhuma linha válida em {csv_file.name} - pulando arquivo")
                 continue
             
             # Juntar linhas com apenas LF (Unix line ending)
@@ -264,42 +264,42 @@ def load_csv(csv_path: str = None, dataset: str = "vacinacao-covid"):
             
             if result.returncode != 0:
                 stderr = result.stderr.decode('utf-8', errors='replace')
-                logger.error(f"❌ Erro no INSERT para {csv_file.name}: {stderr}")
+                logger.error(f"Erro no INSERT para {csv_file.name}: {stderr}")
                 sys.exit(1)
             
             stdout = result.stdout.decode('utf-8', errors='replace')
             if stdout:
-                logger.info(f"✅ {stdout.strip()}")
+                logger.info(f"{stdout.strip()}")
             
-            logger.info(f"✅ {csv_file.name} carregado com sucesso ({row_count} registros)")
+            logger.info(f"{csv_file.name} carregado com sucesso ({row_count} registros)")
         
         # ========================================================================
         # ESTATÍSTICAS FINAIS (CONSOLIDADAS)
         # ========================================================================
         if total_rows_all == 0:
-            logger.error("❌ Nenhuma linha válida foi carregada em nenhum arquivo")
+            logger.error("Nenhuma linha válida foi carregada em nenhum arquivo")
             sys.exit(1)
         
         logger.info("\n" + "="*70)
-        logger.info("📊 RESUMO FINAL DE CARGA")
+        logger.info("RESUMO FINAL DE CARGA")
         logger.info("="*70)
-        logger.info(f"✅ Total de arquivos processados: {len(csv_files)}")
-        logger.info(f"✅ Total de linhas carregadas: {total_rows_all}")
-        logger.info(f"⚠️  Total de erros: {total_errors_all}")
+        logger.info(f"Total de arquivos processados: {len(csv_files)}")
+        logger.info(f"Total de linhas carregadas: {total_rows_all}")
+        logger.info(f"Total de erros: {total_errors_all}")
         
         # Mostrar total de registros na tabela
         result = client.query("SELECT COUNT(*) FROM vacinacao")
         total = result.result_rows[0][0]
-        logger.info(f"📍 Total de registros na tabela: {total:,}")
+        logger.info(f"Total de registros na tabela: {total:,}")
         
         # Distribuição por estado
         result = client.query("SELECT paciente_endereco_uf, COUNT(*) FROM vacinacao GROUP BY paciente_endereco_uf ORDER BY COUNT(*) DESC")
-        logger.info("🗺️  Distribuição por estado:")
+        logger.info("Distribuição por estado:")
         for row in result.result_rows:
             logger.info(f"   {row[0]}: {row[1]:,} registros")
             
     except Exception as e:
-        logger.error(f"❌ Erro durante carga: {e}")
+        logger.error(f"Erro durante carga: {e}")
         import traceback
         traceback.print_exc()
         sys.exit(1)

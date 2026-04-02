@@ -38,18 +38,18 @@ MODELS = {
 
 def list_models():
     """Lista todos os modelos disponíveis"""
-    print("\n🤖 MODELOS DISPONÍVEIS PARA OLLAMA:\n")
+    print("\nMODELOS DISPONÍVEIS PARA OLLAMA:\n")
     print(f"{'Model':<15} {'Nome':<20} {'Tamanho':<10} {'Descrição':<50}")
     print("-" * 95)
     for model, info in MODELS.items():
-        status = "✅ Instalado" if info['installed'] else "⏳ Não instalado"
+        status = "Instalado" if info['installed'] else "Não instalado"
         print(f"{model:<15} {info['name']:<20} {info['size']:<10} {info['description']:<50}")
         print(f"                          {status}")
     print()
 
 def pull_model(model_name):
     """Baixa um modelo do Ollama"""
-    print(f"\n📥 Baixando modelo: {model_name}...")
+    print(f"\nBaixando modelo: {model_name}...")
     print(f"   Descrição: {MODELS[model_name]['description']}")
     print(f"   Tamanho: {MODELS[model_name]['size']}")
     print(f"   Isso pode levar vários minutos...\n")
@@ -60,31 +60,31 @@ def pull_model(model_name):
         result = subprocess.run(cmd, capture_output=True, text=True)
         
         if result.returncode == 0:
-            print(f"✅ Modelo '{model_name}' baixado com sucesso!")
+            print(f"Modelo '{model_name}' baixado com sucesso!")
             return True
         else:
-            print(f"❌ Erro ao baixar '{model_name}':")
+            print(f"Erro ao baixar '{model_name}':")
             print(result.stderr)
             return False
     except Exception as e:
-        print(f"❌ Erro ao executar comando: {e}")
+        print(f"Erro ao executar comando: {e}")
         return False
 
 def list_installed():
     """Lista modelos instalados no Ollama"""
-    print("\n📦 MODELOS INSTALADOS NO OLLAMA:\n")
+    print("\nMODELOS INSTALADOS NO OLLAMA:\n")
     try:
         cmd = ['docker', 'exec', 'easydatasus-ollama', 'ollama', 'list']
         result = subprocess.run(cmd, capture_output=True, text=True)
         print(result.stdout)
         return True
     except Exception as e:
-        print(f"❌ Erro ao listar modelos: {e}")
+        print(f"Erro ao listar modelos: {e}")
         return False
 
 def test_model(model_name):
     """Testa um modelo com um prompt simples"""
-    print(f"\n🧪 Testando modelo: {model_name}...")
+    print(f"\nTestando modelo: {model_name}...")
     test_prompt = "Responda em uma frase: O que é vacinação?"
     
     try:
@@ -95,21 +95,21 @@ def test_model(model_name):
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
         
         if result.returncode == 0:
-            print(f"✅ Teste bem-sucedido!")
+            print(f"Teste bem-sucedido!")
             print(f"Resposta: {result.stdout.strip()[:200]}")
             return True
         else:
-            print(f"❌ Erro ao testar:")
+            print(f"Erro ao testar:")
             print(result.stderr)
             return False
     except Exception as e:
-        print(f"❌ Erro: {e}")
+        print(f"Erro: {e}")
         return False
 
 def main():
     if len(sys.argv) < 2:
         print("""
-🌐 Gerenciador de Modelos Ollama do EasyDataSUS
+Gerenciador de Modelos Ollama do EasyDataSUS
 
 Uso: python manage_models.py <comando> [modelo]
 
@@ -140,13 +140,13 @@ EXEMPLO:
         model = sys.argv[2]
         test_model(model)
     elif cmd == "install-all":
-        print("⚙️  Instalando todos os modelos recomendados...\n")
+        print("Instalando todos os modelos recomendados...\n")
         for model in MODELS.keys():
             if model != "deepseek-coder:6.7b-base-q4_K_M":  # Pular deepseek que já está
                 pull_model(model)
                 print()
     else:
-        print(f"❌ Comando desconhecido: {cmd}")
+        print(f"Comando desconhecido: {cmd}")
 
 if __name__ == "__main__":
     main()

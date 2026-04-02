@@ -25,7 +25,7 @@ class OllamaProvider(LLMProvider):
         
         for attempt in range(1, self.max_retries + 1):
             try:
-                logger.debug(f"📤 [{self.display_name}] Tentativa {attempt}/{self.max_retries} para Ollama (modelo: {self.model})")
+                logger.debug(f"[{self.display_name}] Tentativa {attempt}/{self.max_retries} para Ollama (modelo: {self.model})")
                 logger.debug(f"Prompt size: {len(prompt)} chars")
                 
                 response = requests.post(
@@ -41,43 +41,43 @@ class OllamaProvider(LLMProvider):
                 )
                 response.raise_for_status()
                 response_json = response.json()
-                logger.debug(f"📥 Resposta JSON recebida")
+                logger.debug(f"Resposta JSON recebida")
                 
                 result = response_json.get("response", "")
-                logger.debug(f"✅ Resposta extraída ({len(result)} chars): {repr(result[:150])}")
+                logger.debug(f"Resposta extraída ({len(result)} chars): {repr(result[:150])}")
                 
                 return result if result else ""
                 
             except requests.exceptions.ConnectionError as e:
                 last_error = str(e)
-                logger.warning(f"❌ [Tentativa {attempt}] Não conseguiu conectar ao Ollama em {self.url}")
+                logger.warning(f"[Tentativa {attempt}] Não conseguiu conectar ao Ollama em {self.url}")
                 if attempt < self.max_retries:
-                    logger.info(f"⏳ Aguardando {self.retry_delay}s antes de retry...")
+                    logger.info(f"Aguardando {self.retry_delay}s antes de retry...")
                     time.sleep(self.retry_delay)
                     
             except requests.exceptions.Timeout as e:
                 last_error = str(e)
-                logger.warning(f"❌ [Tentativa {attempt}] Timeout ao conectar Ollama (timeout={self.timeout}s)")
+                logger.warning(f"[Tentativa {attempt}] Timeout ao conectar Ollama (timeout={self.timeout}s)")
                 if attempt < self.max_retries:
-                    logger.info(f"⏳ Aguardando {self.retry_delay}s antes de retry...")
+                    logger.info(f"Aguardando {self.retry_delay}s antes de retry...")
                     time.sleep(self.retry_delay)
                     
             except requests.exceptions.HTTPError as e:
                 last_error = str(e)
                 if "500" in str(e):
-                    logger.warning(f"❌ [Tentativa {attempt}] Ollama retornou erro 500")
+                    logger.warning(f"[Tentativa {attempt}] Ollama retornou erro 500")
                     if attempt < self.max_retries:
-                        logger.info(f"⏳ Aguardando {self.retry_delay}s antes de retry...")
+                        logger.info(f"Aguardando {self.retry_delay}s antes de retry...")
                         time.sleep(self.retry_delay)
                         continue
-                logger.error(f"❌ Erro HTTP no Ollama ({self.display_name}): {e}")
+                logger.error(f"Erro HTTP no Ollama ({self.display_name}): {e}")
                 raise
                 
             except Exception as e:
                 last_error = str(e)
-                logger.error(f"❌ Erro ao gerar com Ollama ({self.display_name}): {e}")
+                logger.error(f"Erro ao gerar com Ollama ({self.display_name}): {e}")
                 raise
         
         # Se chegou aqui, todas as tentativas falharam
-        logger.error(f"❌ Todas as {self.max_retries} tentativas falharam. Último erro: {last_error}")
+        logger.error(f"Todas as {self.max_retries} tentativas falharam. Último erro: {last_error}")
         raise requests.exceptions.HTTPError(f"Ollama falhou após {self.max_retries} tentativas: {last_error}")

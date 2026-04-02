@@ -104,7 +104,15 @@ def validate_csv_schema(csv_content: str, dataset: str) -> SchemaValidationRespo
         with open(schema_path) as f:
             schema = json.load(f)
         
-        schema_columns = {col["name"]: col.get("type", "String") for col in schema.get("columns", [])}
+        # Suportar ambos os formatos de schema
+        columns_data = schema.get("columns", [])
+        if not columns_data:
+            # Formato antigo: "colunas_principais" como dicionário
+            colunas_principais = schema.get("colunas_principais", {})
+            schema_columns = {col_name: col_info.get("tipo", "String") for col_name, col_info in colunas_principais.items()}
+        else:
+            # Formato novo: "columns" como array
+            schema_columns = {col["name"]: col.get("type", "String") for col in columns_data}
         
         # Ler primeiras linhas do CSV
         reader = csv.DictReader(csv_content.split('\n'), delimiter=";")
@@ -132,7 +140,7 @@ def validate_csv_schema(csv_content: str, dataset: str) -> SchemaValidationRespo
         # Verificar colunas extras
         extra = csv_columns - schema_column_names
         if extra:
-            warnings.append(f"Colunas extras no CSV (serão ignoradas): {', '.join(extra[:3])}")
+            warnings.append(f"Colunas extras no CSV (serão ignoradas): {', '.join(list(extra)[:3])}")
         
         # Contar linhas válidas
         row_count = 0
@@ -227,10 +235,10 @@ async def upload_dataset(
         with open(file_path, 'wb') as f:
             f.write(content)
         
-        logger.info(f"✅ Arquivo salvo: {file_path}")
+        logger.info(f"Arquivo salvo: {file_path}")
         
         # Carregar dados no ClickHouse
-        logger.info(f"📥 Iniciando carga no ClickHouse...")
+        logger.info(f"Iniciando carga no ClickHouse...")
         
         # Contar linhas do arquivo
         reader = csv.DictReader(csv_content.split('\n'), delimiter=";")
@@ -249,7 +257,7 @@ async def upload_dataset(
             )
         
         except Exception as e:
-            logger.error(f"❌ Erro ao carregar no ClickHouse: {e}")
+            logger.error(f"Erro ao carregar no ClickHouse: {e}")
             
             # Remover arquivo se carga falhou
             file_path.unlink()
@@ -262,7 +270,7 @@ async def upload_dataset(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"❌ Erro no upload: {e}")
+        logger.error(f"Erro no upload: {e}")
         raise HTTPException(
             status_code=500,
             detail=f"Erro ao processar upload: {str(e)}"
@@ -398,7 +406,7 @@ async def delete_dataset_file(dataset_id: str, filename: str):
             raise HTTPException(status_code=404, detail="Arquivo não encontrado")
         
         file_path.unlink()
-        logger.info(f"✅ Arquivo deletado: {file_path}")
+        logger.info(f"Arquivo deletado: {file_path}")
         
         return {
             "success": True,

@@ -146,10 +146,10 @@ def ask(req: AskRequest):
     ```
     """
     
-    logger.info(f"📝 Pergunta recebida: {req.question}")
-    logger.info(f"🤖 Modelo: {req.model}")
+    logger.info(f"Pergunta recebida: {req.question}")
+    logger.info(f"Modelo: {req.model}")
     if req.dataset:
-        logger.info(f"🎯 Dataset especificado: {req.dataset}")
+        logger.info(f"Dataset especificado: {req.dataset}")
     
     try:
         # Determinar dataset a usar
@@ -160,14 +160,14 @@ def ask(req: AskRequest):
             detected = _detect_dataset_for_question(req.question)
             if detected:
                 dataset_to_use = detected
-                logger.info(f"🔍 Dataset detectado automaticamente: {dataset_to_use}")
+                logger.info(f"Dataset detectado automaticamente: {dataset_to_use}")
         
         # Carregar metadata do dataset
         try:
             metadata = load_metadata(dataset_to_use)
-            logger.info(f"✅ Metadata carregado para dataset: {dataset_to_use}")
+            logger.info(f"Metadata carregado para dataset: {dataset_to_use}")
         except FileNotFoundError:
-            logger.error(f"❌ Dataset não encontrado: {dataset_to_use}")
+            logger.error(f"Dataset error - Dataset não encontrado: {dataset_to_use}")
             return {
                 "question": req.question,
                 "dataset": dataset_to_use,
@@ -178,7 +178,7 @@ def ask(req: AskRequest):
             }
         
         # 1. Gerar SQL com LLM
-        logger.info("🧠 Gerando SQL...")
+        logger.info("Gerando SQL...")
         raw_sql = generate_sql(req.question, metadata, req.model, dataset_to_use)
         
         if not raw_sql:
@@ -195,12 +195,12 @@ def ask(req: AskRequest):
         logger.debug(f"SQL gerado (raw): {raw_sql}")
         
         # 2. Sanitizar
-        logger.info("🧹 Sanitizando SQL...")
+        logger.info("Sanitizando SQL...")
         sql = sanitize_sql(raw_sql)
         logger.debug(f"SQL sanitizado: {sql}")
         
         # 3. Validar
-        logger.info("✓ Validando SQL...")
+        logger.info("Validando SQL...")
         if not is_valid_sql(sql, dataset_to_use):
             logger.error(f"SQL inválido: {sql}")
             return {
@@ -213,7 +213,7 @@ def ask(req: AskRequest):
             }
         
         # 4. Executar
-        logger.info("▶️ Executando query no ClickHouse...")
+        logger.info("Executando query no ClickHouse...")
         result = run_query(sql)
         
         # Verificar se houve erro
@@ -228,10 +228,10 @@ def ask(req: AskRequest):
                 "success": False
             }
         
-        logger.info(f"✅ Query executada com sucesso. Resultado: {len(result)} linhas")
+        logger.info(f"Query executada com sucesso. Resultado: {len(result)} linhas")
         
         # 5. Interpretar
-        logger.info("💬 Interpretando resultado...")
+        logger.info("Interpretando resultado...")
         insight = interpret_result(req.question, result, req.model)
         
         return {
@@ -244,7 +244,7 @@ def ask(req: AskRequest):
         }
     
     except Exception as e:
-        logger.exception(f"❌ Erro inesperado: {e}")
+        logger.exception(f"Erro inesperado: {e}")
         return {
             "question": req.question,
             "dataset": req.dataset or "unknown",
