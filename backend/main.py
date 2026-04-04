@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 # Criar app
 app = FastAPI(
     title="EasyDataSUS",
-    description="Sistema de consultas em linguagem natural sobre dados de vacinação",
+    description="Sistema de consultas em linguagem natural sobre dados de saúde pública (DataSUS) com suporte a múltiplos temas e modelos LLM locais",
     version="1.0.0"
 )
 
@@ -48,10 +48,46 @@ def root():
         "service": "EasyDataSUS",
         "version": "1.0.0",
         "status": "running",
+        "description": "Sistema de consultas em linguagem natural sobre dados de saúde (DataSUS)",
+        "documentation": "/docs",
+        "openapi_schema": "/openapi.json",
         "endpoints": {
-            "health": "/health",
-            "questions": "/api/questions",
-            "ask": "/api/ask"
+            "health": {
+                "method": "GET",
+                "url": "/health",
+                "description": "Verificar saúde do servidor"
+            },
+            "questions": {
+                "method": "GET",
+                "url": "/api/questions",
+                "description": "Listar perguntas pré-prontas por dataset"
+            },
+            "ask": {
+                "method": "POST",
+                "url": "/api/ask",
+                "description": "Fazer pergunta em português e receber resposta interpretada"
+            },
+            "admin_upload": {
+                "method": "POST",
+                "url": "/api/admin/datasets/upload",
+                "description": "Upload de CSV para um dataset"
+            },
+            "admin_available": {
+                "method": "GET",
+                "url": "/api/admin/datasets/available",
+                "description": "Listar datasets disponíveis"
+            },
+            "admin_info": {
+                "method": "GET",
+                "url": "/api/admin/datasets/{dataset_id}/info",
+                "description": "Informações detalhadas de um dataset"
+            }
+        },
+        "quick_start": {
+            "1_learn": "Veja a documentação em /docs",
+            "2_get_questions": "GET /api/questions",
+            "3_ask_question": "POST /api/ask com {\"question\": \"...\", \"dataset\": \"vacinacao-covid\"}",
+            "4_upload_data": "POST /api/admin/datasets/upload (requer arquivo CSV)"
         }
     }
 

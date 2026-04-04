@@ -1,6 +1,6 @@
 services:
   clickhouse:
-    image: clickhouse/clickhouse-server:latest
+    image: clickhouse/clickhouse-server:24.3.3
     container_name: easydatasus-clickhouse
     ports:
       - "8123:8123"
@@ -22,7 +22,7 @@ services:
       - easydatasus
 
   ollama:
-    image: ollama/ollama:latest
+    image: ollama/ollama:0.2.0
     container_name: easydatasus-ollama
     ports:
       - "11434:11434"
@@ -32,8 +32,6 @@ services:
       OLLAMA_HOST: 0.0.0.0:11434
     networks:
       - easydatasus
-    profiles:
-      - with-ollama
 
 volumes:
   clickhouse_data:

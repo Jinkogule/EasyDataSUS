@@ -58,11 +58,16 @@ def is_valid_sql(sql: str, dataset: str = "vacinacao-covid") -> bool:
     """
     Valida SQL de forma mais rigorosa.
     
+    Verifica:
+    - SQL começa com SELECT (segurança)
+    - Contém cláusula FROM
+    - Referencia tabela correta do dataset
+    
     Args:
         sql: SQL a validar
-        dataset: Dataset esperado (para validar referência à tabela)
+        dataset: Dataset esperado (para validar referência à tabela correta)
     
-    Mapeamento de dataset → tabela:
+    Dataset→Tabela Mapping:
         - vacinacao-covid → vacinacao
         - dengue-2024 → dengue
         - influenza-2025 → influenza
