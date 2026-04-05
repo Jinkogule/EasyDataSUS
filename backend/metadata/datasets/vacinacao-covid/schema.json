@@ -1,0 +1,81 @@
+{
+  "tabela": "vacinacao",
+  "descricao": "Dados de vacinação COVID-19 no Brasil - DataSUS",
+  "fonte": "DataSUS",
+  "colunas_principais": {
+    "paciente_endereco_uf": {
+      "tipo": "String",
+      "descricao": "Unidade Federativa (Estado)",
+      "exemplos": ["SP", "RJ", "SC", "AC", "ES", "MG", "RS", "BA"]
+    },
+    "paciente_endereco_nmMunicipio": {
+      "tipo": "String",
+      "descricao": "Nome do município",
+      "exemplos": ["São Paulo", "Rio de Janeiro", "Florianópolis"]
+    },
+    "paciente_idade": {
+      "tipo": "Int32",
+      "descricao": "Idade do paciente em anos"
+    },
+    "paciente_dataNascimento": {
+      "tipo": "Date",
+      "descricao": "Data de nascimento (YYYY-MM-DD)"
+    },
+    "paciente_enumSexoBiologico": {
+      "tipo": "String",
+      "descricao": "Sexo biológico",
+      "exemplos": ["M", "F"]
+    },
+    "vacina_dataAplicacao": {
+      "tipo": "Date",
+      "descricao": "Data de aplicação da vacina (YYYY-MM-DD)"
+    },
+    "vacina_nome": {
+      "tipo": "String",
+      "descricao": "Nome da vacina",
+      "exemplos": ["Pfizer", "AstraZeneca", "Janssen", "Sinovac", "Moderna"]
+    },
+    "vacina_descricao_dose": {
+      "tipo": "String",
+      "descricao": "Descrição da dose",
+      "exemplos": ["1ª dose", "2ª dose", "Dose de reforço", "Reforço 1", "Reforço 2"]
+    },
+    "vacina_lote": {
+      "tipo": "String",
+      "descricao": "Número do lote da vacina"
+    },
+    "vacina_fabricante_nome": {
+      "tipo": "String",
+      "descricao": "Nome da fabricante da vacina"
+    },
+    "estabelecimento_razaoSocial": {
+      "tipo": "String",
+      "descricao": "Nome do estabelecimento de saúde"
+    },
+    "estabelecimento_municipio_nome": {
+      "tipo": "String",
+      "descricao": "Município do estabelecimento"
+    },
+    "estabelecimento_uf": {
+      "tipo": "String",
+      "descricao": "Estado do estabelecimento"
+    },
+    "sistema_origem": {
+      "tipo": "String",
+      "descricao": "Sistema de origem dos dados",
+      "exemplos": ["SIPNI", "CONECTA-SUS", "SI-PNI"]
+    }
+  },
+  "exemplos_queries": {
+    "quantas_vacinas_sp": "SELECT COUNT(*) FROM vacinacao WHERE paciente_endereco_uf = 'SP'",
+    "vacinas_por_estado": "SELECT paciente_endereco_uf, COUNT(*) FROM vacinacao GROUP BY paciente_endereco_uf",
+    "doses_por_vacina": "SELECT vacina_nome, COUNT(*) FROM vacinacao GROUP BY vacina_nome",
+    "evolucao_mensal": "SELECT toYYYYMM(vacina_dataAplicacao) as mes, COUNT(*) FROM vacinacao GROUP BY mes ORDER BY mes"
+  },
+  "notas": [
+    "Para filtrar por data, use vacina_dataAplicacao",
+    "Para filtros de texto (estado, município), use = (não LIKE)",
+    "Use COUNT(*) para contar, GROUP BY para agregar",
+    "Sempre use LIMIT para resultados grandes"
+  ]
+}
