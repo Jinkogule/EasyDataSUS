@@ -179,7 +179,7 @@ def ask(req: AskRequest):
         
         # 1. Gerar SQL com LLM
         logger.info("🧠 Gerando SQL...")
-        raw_sql = generate_sql(req.question, metadata, req.model)
+        raw_sql = generate_sql(req.question, metadata, req.model, dataset_to_use)
         
         if not raw_sql:
             logger.error("Falha ao gerar SQL")

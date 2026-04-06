@@ -5,7 +5,11 @@ from datetime import datetime
 from pathlib import Path
 import subprocess
 
+# ✅ Adicionar diretório parent (backend/) ao path para permitir imports
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 import clickhouse_connect
+from config.datasets import get_table_name
 
 # Configurar logging
 logging.basicConfig(
@@ -31,10 +35,20 @@ def get_clickhouse_client():
         logger.error(f"❌ Erro ao conectar ao ClickHouse: {e}")
         sys.exit(1)
 
-def table_exists(client):
-    """Verifica se tabela 'vacinacao' existe"""
+def table_exists(client, dataset: str = "vacinacao-covid"):
+    """
+    Verifica se tabela do dataset existe no ClickHouse.
+    
+    Args:
+        client: Cliente ClickHouse
+        dataset: Dataset a verificar (padrão: "vacinacao-covid")
+    
+    Returns:
+        True se tabela existe, False caso contrário
+    """
     try:
-        result = client.query("SELECT 1 FROM vacinacao LIMIT 1")
+        table_name = get_table_name(dataset)
+        result = client.query(f"SELECT 1 FROM {table_name} LIMIT 1")
         return True
     except Exception:
         return False
@@ -90,16 +104,23 @@ def load_csv(csv_path: str = None, dataset: str = "vacinacao-covid"):
     
     client = get_clickhouse_client()
     
-    # Verificar se tabela existe
-    if not table_exists(client):
-        logger.error("❌ Tabela 'vacinacao' não existe. Execute o init.sql primeiro.")
+    # ✅ FIXO: Obter nome da tabela dinamicamente
+    try:
+        table_name = get_table_name(dataset)
+    except ValueError as e:
+        logger.error(f"❌ {e}")
         sys.exit(1)
     
-    # Limpar dados antigos quando carregando múltiplos arquivos
+    # ✅ FIXO: Verificar se tabela existe (usando tabela dinâmica)
+    if not table_exists(client, dataset):
+        logger.error(f"❌ Tabela '{table_name}' não existe. Execute o init.sql primeiro.")
+        sys.exit(1)
+    
+    # ✅ FIXO: Limpar dados antigos quando carregando múltiplos arquivos (tabela dinâmica)
     if len(csv_files) > 1 or csv_path is None:
         logger.info("🗑️  Limpando dados antigos da tabela...")
         try:
-            client.command("TRUNCATE TABLE vacinacao")
+            client.command(f"TRUNCATE TABLE {table_name}")
             logger.info("✅ Tabela limpa - pronta para novos dados")
         except Exception as e:
             logger.warning(f"⚠️  Não conseguiu limpar tabela (pode estar vazia): {e}")
@@ -230,7 +251,7 @@ def load_csv(csv_path: str = None, dataset: str = "vacinacao-covid"):
                 'docker', 'exec', '-i', 'easydatasus-clickhouse', 
                 'clickhouse-client', '-u', 'admin', '--password', 'admin', 
                 '-d', 'default', 
-                '-q', 'INSERT INTO vacinacao FORMAT TSV'
+                '-q', f'INSERT INTO {table_name} FORMAT TSV'
             ]
             
             logger.info(f"Executando INSERT para {csv_file.name}...")
