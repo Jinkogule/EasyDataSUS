@@ -32,7 +32,7 @@ def load_metadata(dataset: str = "vacinacao-covid") -> str:
 
     if not file_path.exists():
         raise FileNotFoundError(
-            f"❌ Metadata não encontrado: {file_path}\n"
+            f"Metadata não encontrado: {file_path}\n"
             f"   Certifique-se de que o dataset '{dataset}' existe em metadata/datasets/"
         )
 

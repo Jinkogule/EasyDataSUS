@@ -2,7 +2,25 @@
 
 > Consulte dados públicos de saúde (DataSUS) fazendo perguntas em português. O sistema gera SQL automaticamente e retorna respostas interpretadas por IA local.
 
-**Status:** ✅ MVP Completo | 🚀 Pronto para Deploy | 📊 Multi-Dataset Support
+**Status:** ✅ MVP Completo | 🚀 Pronto para Deploy | 🏗️ Arquitetura Multi-Dataset Genérica | 🔧 Escalável
+
+---
+
+## 🆕 Arquitetura Multi-Dataset Genérica
+
+Este projeto implementa una **arquitetura escalável** que suporta múltiplos temas de dados (datasets) sem necessidade de recodificar lógica central:
+
+- **GenericSQL Generation:** `sql_service.py` gera queries para qualquer dataset dinamicamente
+- **Theme-Agnostic ETL:** `load_csv.py` carrega dados para qualquer tema
+- **Centralized Config:** `backend/config/datasets.py` registra todos os datasets de forma declarativa
+- **Smart Routing:** Sistema detecta automaticamente qual dataset usar pela pergunta
+
+**Suportados atualmente:**
+- 🩺 **Vacinação COVID-19** (`vacinacao-covid`) - 390K+ registros
+- 🦟 **Dengue 2024** (`dengue-2024`) - estrutura pronta
+- 🤒 **Influenza 2025** (`influenza-2025`) - estrutura pronta
+
+**Adicionar novo dataset?** Veja [Adicionar Novo Dataset](#-adicionar-novo-dataset)
 
 ---
 
@@ -30,34 +48,42 @@ Em São Paulo foram aplicadas 824 doses de vacina.
 ## 🏗️ Arquitetura
 
 ```
-┌─────────────────────────────┐         Frontend
-│   Pergunta em Português     │         (React)
-└──────────────┬──────────────┘
-               │
-       ┌───────▼────────┐
-       │  FastAPI       │  Port 8000
-       │  Backend       │
-       └───────┬────────┘
-               │
-        ┌──────┴──────────┐
-        │                 │
-    ┌───▼────┐         ┌──▼─────┐
-    │ClickHouse       │ Ollama
-    │ Port 8123       │ Port 11434
-    │                 │
-    │ 390K+ Vacinas   │ DeepSeek
-    │ Dengue          │ Orca-Mini
-    │ Influenza       │ Mistral
-    └─────────┘       │ Neural-Chat
-              │       └─────────────┘
+┌──────────────────────────────────┐
+│  Pergunta em Português           │  Frontend
+│  "Qual relação vacina + casos?\" │  (React)
+└────────────────┬─────────────────┘
+                 │
+         ┌───────▼──────────┐
+         │  FastAPI         │  Port 8000
+         │  + Orchestrator  │  Multi-Dataset
+         └────────┬─────────┘
+                  │
+      ┌───────────┼──────────────┐
+      │           │              │
+   ┌──▼──┐  ┌────▼────┐  ┌──────▼───┐
+   │Vacinação  │Dengue    │Influenza │  Config Registry
+   │(SQL)      │(SQL)     │(SQL)     │  (config/datasets.py)
+   └──┬──┘  └────┬────┘  └──────┬───┘
+      │           │              │
+   ┌──▼──────────▼──────────────▼──┐
+   │     ClickHouse (TimeSeries)   │  Port 8123
+   │     Multi-Table Support        │  390K+ rows
+   └───────────────────────────────┘
+        │
+   ┌────▼────────────────┐
+   │    Ollama (Local)    │  Port 11434
+   │  DeepSeek/Mistral    │  GPU Optional
+   │  Retry: 3x Auto      │
+   └─────────────────────┘
 ```
 
 **Stack Técnico:**
-- **Backend:** FastAPI + Python 3.10+
-- **Database:** ClickHouse (SQL OLAP)
-- **LLM:** Ollama (local, sem APIs externas)
+- **Backend:** FastAPI + Python 3.10+ (thread-safe)
+- **Database:** ClickHouse 23+ (OLAP TimeSeries)
+- **LLM:** Ollama (local, sem APIs externas, retry automático)
 - **Deployment:** Docker Compose
-- **Multi-Dataset:** Arquitetura escalável
+- **Multi-Dataset:** Config centralizado (backend/config/datasets.py)
+- **Architecture:** GenericSQL generation + Theme-agnostic patterns
 
 ---
 
@@ -138,10 +164,12 @@ OLLAMA_HOST=http://localhost:11434
 OLLAMA_MODEL=deepseek-coder:6.7b-base-q4_K_M
 OLLAMA_TIMEOUT=180
 
-FASTAPI_HOST=0.0.0.0
+FASTAPI_HOST=localhost
 FASTAPI_PORT=8000
 FASTAPI_LOG_LEVEL=INFO
 ```
+
+💡 **Diferença do host:** Mudado de `0.0.0.0` para `localhost` (mais seguro para envs locais)
 
 ---
 
@@ -230,6 +258,56 @@ curl -X POST "http://localhost:8000/api/ask" `
   "sql": "SELECT COUNT(*) FROM vacinacao WHERE paciente_endereco_uf = 'SP'",
   "data": [[824]],
   "insight": "Em São Paulo foram aplicadas 824 doses de vacina."
+}
+```
+
+---
+
+## 🔀 Usar Multi-Dataset
+
+### Testar com Dataset Específico
+
+```powershell
+$body = @{
+    question = "Quantos casos de dengue?"
+    dataset = "dengue-2024"
+    model = "deepseek-coder:6.7b-base-q4_K_M"
+} | ConvertTo-Json
+
+curl -X POST "http://localhost:8000/api/ask" `
+  -Headers @{"Content-Type"="application/json"} `
+  -Body $body
+```
+
+### Detecção Automática
+
+Se omitir `dataset`, o sistema tenta detectar pela pergunta:
+
+```powershell
+$body = @{
+    question = "Quantas internações por COVID?"  # ← Sistema detecta automaticamente
+    model = "deepseek-coder:6.7b-base-q4_K_M"
+} | ConvertTo-Json
+
+curl -X POST "http://localhost:8000/api/ask" `
+  -Headers @{"Content-Type"="application/json"} `
+  -Body $body
+```
+
+### Listar Datasets Disponíveis
+
+```powershell
+curl http://localhost:8000/api/admin/datasets/available
+```
+
+Resposta:
+```json
+{
+  "datasets": [
+    {"id": "vacinacao-covid", "table": "vacinacao", "rows": 390911},
+    {"id": "dengue-2024", "table": "dengue", "rows": 0},
+    {"id": "influenza-2025", "table": "influenza", "rows": 0}
+  ]
 }
 ```
 
@@ -450,38 +528,75 @@ docker exec easydatasus-ollama ollama rm mistral
 
 ## 📊 Adicionar Novo Dataset
 
-**1. Criar estrutura:**
-```
-backend/metadata/datasets/seu-dataset/
-  └── schema.json
+### Passo 1: Registrar em `backend/config/datasets.py`
 
-backend/data/datasets/seu-dataset/
-  └── seu-arquivo.csv
-```
+```python
+# backend/config/datasets.py - DATASETS_CONFIG dict
 
-**2. Definir schema** (`schema.json`):
-```json
-{
-  "name": "Seu Dataset",
-  "description": "Descrição",
-  "table_name": "seu_dataset",
-  "columns": [
-    {"name": "id", "type": "Int32"},
-    {"name": "data", "type": "Date"},
-    {"name": "valor", "type": "Float32"}
-  ]
+DATASETS_CONFIG = {
+    "seu-dataset-2024": {
+        "table_name": "seu_dataset_2024",
+        "description": "Descrição do seu dataset",
+        "metadata_file": "backend/metadata/datasets/seu-dataset-2024/schema.json",
+    },
+    # ... outros datasets
 }
 ```
 
-**3. Carregar dados:**
+### Passo 2: Criar estrutura de metadados
+
+**1. Criar pasta:**
+```powershell
+mkdir backend/metadata/datasets/seu-dataset-2024
+mkdir backend/data/datasets/seu-dataset-2024
+```
+
+**2. Definir schema** (`backend/metadata/datasets/seu-dataset-2024/schema.json`):
+```json
+{
+  "name": "Seu Dataset 2024",
+  "description": "Descrição detalhada",
+  "fonte": "DataSUS / Seu órgão",
+  "table_name": "seu_dataset_2024",
+  "colunas_principais": {
+    "id": {"tipo": "Int32", "descricao": "ID único", "exemplos": [1, 2, 3]},
+    "data": {"tipo": "Date", "descricao": "Data do evento", "exemplos": ["2024-01-15"]},
+    "estado_uf": {"tipo": "String", "descricao": "UF do evento", "exemplos": ["SP", "RJ"]},
+    "valor": {"tipo": "Float32", "descricao": "Valor medido", "exemplos": [100.5]}
+  }
+}
+```
+
+### Passo 3: Carregar dados
+
+**Opção A: CLI (Recomendado)**
 ```powershell
 python etl/load_csv.py
 ```
+O sistema detecta automaticamente novos datasets em `backend/config/datasets.py`
 
-ou via API:
+**Opção B: API**
 ```powershell
-curl -X POST "http://localhost:8000/api/admin/datasets/upload?dataset=seu-dataset" `
+curl -X POST "http://localhost:8000/api/admin/datasets/upload?dataset=seu-dataset-2024" `
   -F "file=@seu-arquivo.csv"
+```
+
+**Opção C: Upload Manual**
+1. Coloque arquivo CSV em: `backend/data/datasets/seu-dataset-2024/`
+2. Execute: `python etl/load_csv.py`
+
+### Passo 4: Testar
+
+```powershell
+$body = @{
+    question = "Pergunta sobre seu novo dataset"
+    dataset = "seu-dataset-2024"
+    model = "deepseek-coder:6.7b-base-q4_K_M"
+} | ConvertTo-Json
+
+curl -X POST "http://localhost:8000/api/ask" `
+  -Headers @{"Content-Type"="application/json"} `
+  -Body $body
 ```
 
 ---
@@ -493,70 +608,79 @@ backend/
 ├── main.py                              # FastAPI app
 ├── requirements.txt                     # Dependências
 ├── .env                                 # Configuração
+├── config/                              # 🆕 Configuração Centralizada
+│   ├── __init__.py
+│   └── datasets.py                      # 🆕 Registry de datasets + helpers
 ├── routes/
-│   ├── query.py                         # POST /ask
+│   ├── query.py                         # POST /ask (multi-dataset)
 │   ├── questions.py                     # GET /questions
 │   └── admin.py                         # Upload + gerenciamento
 ├── services/
-│   ├── sql_service.py                   # Geração SQL
+│   ├── sql_service.py                   # 🔄 GENÉRICO: cria SQL para qualquer dataset
 │   └── interpretation_service.py        # Interpretação
 ├── llm/
 │   ├── base.py                          # Interface
 │   ├── router.py                        # Seletor de modelo
-│   ├── ollama_provider.py               # Com retry automático
+│   ├── ollama_provider.py               # ✅ Com retry automático (3x)
 │   └── openai_provider.py               # Alternativa
 ├── db/
 │   └── clickhouse.py                    # Cliente BD
 ├── etl/
-│   └── load_csv.py                      # Carregar dados (multi-CSV)
+│   └── load_csv.py                      # 🔄 GENÉRICO: carrega qualquer dataset
 ├── metadata/
-│   ├── loader.py                        # load_metadata()
+│   ├── loader.py                        # load_metadata(dataset)
 │   └── datasets/
 │       ├── vacinacao-covid/
-│       │   ├── schema.json              # 32 colunas
+│       │   ├── schema.json              # 32 colunas, tabela: vacinacao
 │       │   └── README.md
 │       ├── dengue-2024/
-│       │   └── schema.json
+│       │   └── schema.json              # Estrutura dengue, tabela: dengue
 │       └── influenza-2025/
-│           └── schema.json
-└── data/
-    ├── datasets/
-    │   ├── vacinacao-covid/
-    │   │   └── vacinacao-ac-es.csv      # 390K registros
-    │   ├── dengue-2024/
-    │   │   └── dados.csv
-    │   └── influenza-2025/
-    │       └── dados.csv
-    └── README_DATASETS.md
+│           └── schema.json              # Estrutura influenza, tabela: influenza
+├── data/
+│   ├── datasets/
+│   │   ├── vacinacao-covid/
+│   │   │   └── vacinacao-ac-es.csv      # 390K+ registros
+│   │   ├── dengue-2024/
+│   │   │   └── (dados carregados aqui)
+│   │   └── influenza-2025/
+│   │       └── (dados carregados aqui)
+│   └── README_DATASETS.md
+└── (outros arquivos)
 
-docker-compose.yml                      # Infrastructure
+docker-compose.yml                      # Infrastructure (ClickHouse + Ollama)
+.env.example                            # Template de configuração
 .gitignore                              # Git exclusões
-README.md                               # Este arquivo (centralizado)
-ARCHITECTURE.md                         # Detalhes técnicos
-FRONTEND_INTEGRATION.md                 # React integration
+README.md                               # Este arquivo (público, centralizado)
+/docs/                                  # 🆕 Documentação interna (gitignored)
+│   ├── ESCALABILIDADE_MULTI_TEMAS.md
+│   ├── IMPLEMENTACAO_ESCALABILIDADE.md
+│   └── ...(outros guides)
+ARCHITECTURE.md                         # Detalhes técnicos (quando criado)
 ```
 
 ---
 
 ## 🔄 Recursos Principais
 
-### ✅ Suportado
-- Multi-dataset (vacinação, dengue, influenza)
-- Upload de CSV com validação
-- Roteamento automático de perguntas
-- Retry logic (3x) para Ollama
-- Fallback inteligente se LLM falhar
-- Modelos intercambiáveis (DeepSeek, Orca, Mistral)
-- Múltiplas perguntas pré-prontas
+### ✅ Suportado (MVP)
+- **Multi-dataset:** Vacinação COVID-19, Dengue 2024, Influenza 2025 (extensível)
+- **Arquitetura genérica:** SQL service + ETL agnósticos a temas
+- **Upload de CSV:** Validação automática de schema
+- **Roteamento smart:** Detecta dataset automaticamente pela pergunta
+- **Retry automático:** 3x retry para Ollama com backoff
+- **Fallback robusto:** Query genérica se LLM falhar
+- **Modelos intercambiáveis:** DeepSeek, Orca, Mistral, Neural-Chat
+- **Config centralizado:** `backend/config/datasets.py` para registrar novos temas
 
-### 🔄 Em Desenvolvimento
+### 🔄 Roadmap (Próximos)
 - Frontend Web (React)
-- Dashboard com gráficos
-- Cache de queries
-- Histórico de perguntas
-- Autenticação/autorização
-- GPU acceleration
-- Clustering de dados
+- Dashboard com gráficos + exportação
+- Cache de queries + histórico
+- Análises multi-dataset (correlação temporal)
+- Autenticação/autorização básica
+- GPU acceleration opcional
+- GraphQL API alternativa
 
 ---
 
