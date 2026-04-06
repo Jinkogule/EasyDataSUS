@@ -1,14 +1,34 @@
 # 🚀 EasyDataSUS - Sistema NLP para Consultas de Dados de Saúde
 
-> Consulte dados públicos de saúde (DataSUS) fazendo perguntas em português. O sistema gera SQL automaticamente e retorna respostas interpretadas por IA local.
+> Consulte dados públicos de saúde (DataSUS) fazendo perguntas em português. O sistema gera SQL automaticamente e retorna respostas interpretadas por IA local (Ollama).
 
-**Status:** ✅ MVP Completo | 🚀 Pronto para Deploy | 🏗️ Arquitetura Multi-Dataset Genérica | 🔧 Escalável
+**Status:** ✅ MVP Funcional | ⚠️ Em Validação | 🏗️ Arquitetura Multi-Dataset Escalável | 🔧 Pronto para Novos Datasets
 
 ---
 
-## 🆕 Arquitetura Multi-Dataset Genérica
+## 🆕 Últimas Atualizações (Junho 2026)
 
-Este projeto implementa una **arquitetura escalável** que suporta múltiplos temas de dados (datasets) sem necessidade de recodificar lógica central:
+- ✅ **Documentação completa** — Novo arquivo [ESTRUCTURA_ARQUIVOS_SISTEMA.md](./docs/ESTRUCTURA_ARQUIVOS_SISTEMA.md) explicando papel de cada componente
+- ✅ **Refatoração concluída** — Multi-dataset totalmente funcional (05/04/2026)
+- 🧪 **MVP Validado** — Vacinação COVID-19 com 390K+ registros
+- 📊 **Estrutura pronta** — Dengue 2024 e Influenza 2025 aguardando dados reais
+- 🎯 **Próxima fase** — Frontend web + avaliação de modelos LLM
+
+---
+
+## 📊 Status dos Datasets
+
+| Dataset | Status | Registros | Ações |
+|---------|--------|-----------|-------|
+| **Vacinação COVID-19** | ✅ Produção | 390K+ | [README](./backend/data/README_DATASETS.md) |
+| **Dengue 2024** | 🏗️ Estrutura pronta | 0 | Aguardando dados |
+| **Influenza 2025** | 🏗️ Estrutura pronta | 0 | Aguardando dados |
+
+**Para adicionar novo dataset:** Veja seção [Adicionar Novo Dataset](#-adicionar-novo-dataset)
+
+---
+
+Este projeto implementa uma **arquitetura escalável** que suporta múltiplos temas de dados (datasets) sem necessidade de recodificar lógica central:
 
 - **GenericSQL Generation:** `sql_service.py` gera queries para qualquer dataset dinamicamente
 - **Theme-Agnostic ETL:** `load_csv.py` carrega dados para qualquer tema
@@ -652,11 +672,13 @@ docker-compose.yml                      # Infrastructure (ClickHouse + Ollama)
 .env.example                            # Template de configuração
 .gitignore                              # Git exclusões
 README.md                               # Este arquivo (público, centralizado)
-/docs/                                  # 🆕 Documentação interna (gitignored)
-│   ├── ESCALABILIDADE_MULTI_TEMAS.md
-│   ├── IMPLEMENTACAO_ESCALABILIDADE.md
-│   └── ...(outros guides)
-ARCHITECTURE.md                         # Detalhes técnicos (quando criado)
+/docs/                                  # 🆕 Documentação técnica
+│   ├── ESTRUCTURA_ARQUIVOS_SISTEMA.md     # Papel de cada arquivo
+│   ├── ESCALABILIDADE_MULTI_TEMAS.md      # Arquitetura multi-dataset
+│   ├── IMPLEMENTACAO_ESCALABILIDADE.md    # Detalhes implementation
+│   ├── ARCHITECTURE.md                     # Design técnico
+│   ├── ANALISE_ARQUIVOS_CRITICOS.md       # Análise crítica
+│   └── (outros guides)
 ```
 
 ---
@@ -674,13 +696,14 @@ ARCHITECTURE.md                         # Detalhes técnicos (quando criado)
 - **Config centralizado:** `backend/config/datasets.py` para registrar novos temas
 
 ### 🔄 Roadmap (Próximos)
-- Frontend Web (React)
-- Dashboard com gráficos + exportação
-- Cache de queries + histórico
+- Frontend Web (React / Vue)
+- Dashboard com gráficos + exportação de resultados
 - Análises multi-dataset (correlação temporal)
 - Autenticação/autorização básica
-- GPU acceleration opcional
+- GPU acceleration opcional (NVIDIA)
 - GraphQL API alternativa
+- Tests automatizados (pytest)
+- Logging persistente (banco de dados)
 
 ---
 
@@ -749,15 +772,19 @@ curl http://localhost:11434/api/tags
 curl http://localhost:8000/health
 ```
 
-**Issues do GitHub:**
-https://github.com/Jinkogule/EasyDataSUS/issues
+**Problemas e Sugestões:**
+Abra uma issue no repositório com detalhes do erro
 
 ---
 
-## 📝 Seções Técnicas
+## 📝 Documentação Técnica
 
-- **[ARCHITECTURE.md](./ARCHITECTURE.md)** - Design técnico, diagramas, fluxos
-- **[FRONTEND_INTEGRATION.md](./FRONTEND_INTEGRATION.md)** - React/Vue integration
+**Em `/docs/`:**
+- **[ESTRUCTURA_ARQUIVOS_SISTEMA.md](./docs/ESTRUCTURA_ARQUIVOS_SISTEMA.md)** - Papel de cada arquivo e componente
+- **[ARCHITECTURE.md](./docs/ARCHITECTURE.md)** - Design técnico, diagramas, fluxos
+- **[ESCALABILIDADE_MULTI_TEMAS.md](./docs/ESCALABILIDADE_MULTI_TEMAS.md)** - Multi-dataset architecture
+- **[IMPLEMENTACAO_ESCALABILIDADE.md](./docs/IMPLEMENTACAO_ESCALABILIDADE.md)** - Detalhes de implementação
+- **[ANALISE_ARQUIVOS_CRITICOS.md](./docs/ANALISE_ARQUIVOS_CRITICOS.md)** - Análise de segurança e escalabilidade
 
 ---
 
@@ -767,21 +794,26 @@ MIT License - Use livremente em projetos comerciais
 
 ---
 
-## 🎉 Pronto para começar?
+## 🚀 Roteiro de Aprendizado
+
+1. **Entender o sistema:** Leia [ESTRUCTURA_ARQUIVOS_SISTEMA.md](./docs/ESTRUCTURA_ARQUIVOS_SISTEMA.md)
+2. **Setup rapido:** Siga os 6 passos acima
+3. **Testar:** Use os curl examples em Testes Rápidos
+4. **Adicionar dataset:** Siga Adicionar Novo Dataset
+5. **Deploy:** Configure docker-compose.yml para seu servidor
 
 ```powershell
-# Tudo em um comando
-git clone https://github.com/Jinkogule/EasyDataSUS.git
-cd EasyDataSUS
+# Inicializar rápido
 docker-compose up -d
 cd backend
 python -m venv venv
 .\venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-python etl/load_csv.py
 python main.py
 ```
 
 Acesse: http://localhost:8000
 
-**Feito com ❤️ para tornar dados públicos acessíveis a todos!**
+**Próximo passo?** Leia a [documentação de arquivos](./docs/ESTRUCTURA_ARQUIVOS_SISTEMA.md) para entender como o sistema funciona.
+
+**Feito com ❤️ para tornar dados públicos de saúde acessíveis a todos!**

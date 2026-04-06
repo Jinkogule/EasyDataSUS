@@ -319,4 +319,4 @@ package-lock.json.local
 # ✓ README.md, SCALABILITY.md
 # ✓ backend/requirements.txt, .env.example
 # ✓ All source code files (.py)
-# ✓ Data file: backend/data/vacinacao-ac-es.csv
+# ✓ Data files: CSV files in backend/data/datasets/{dataset_name}/
