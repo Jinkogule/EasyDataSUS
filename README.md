@@ -1,19 +1,19 @@
-# 🚀 EasyDataSUS - Sistema NLP para Consultas de Dados de Vacinação
+# 🚀 EasyDataSUS - Sistema NLP para Consultas de Dados de Saúde
 
-> Consulte dados públicos de vacinação (DataSUS) fazendo perguntas simples em português. O sistema transforma suas perguntas em SQL, executa no ClickHouse e interpreta os resultados usando LLM local.
+> Consulte dados públicos de saúde (DataSUS) fazendo perguntas em português. O sistema gera SQL automaticamente e retorna respostas interpretadas por IA local.
 
-**Status:** ✅ MVP Funcional e Demonstrável
+**Status:** ✅ MVP Completo | 🚀 Pronto para Deploy | 📊 Multi-Dataset Support
 
 ---
 
-## ✨ Como Funciona?
+## ✨ Como Funciona
 
 **Você pergunta:**
 ```
 "Quantas vacinas foram aplicadas em SP?"
 ```
 
-**O sistema gera SQL:**
+**Sistema gera SQL automaticamente:**
 ```sql
 SELECT COUNT(*) FROM vacinacao 
 WHERE paciente_endereco_uf = 'SP' 
@@ -30,178 +30,114 @@ Em São Paulo foram aplicadas 824 doses de vacina.
 ## 🏗️ Arquitetura
 
 ```
-┌─────────────────────────────┐
-│   Pergunta em Português     │
+┌─────────────────────────────┐         Frontend
+│   Pergunta em Português     │         (React)
 └──────────────┬──────────────┘
                │
        ┌───────▼────────┐
-       │  FastAPI       │
+       │  FastAPI       │  Port 8000
        │  Backend       │
-       │  (Port 8000)   │
        └───────┬────────┘
                │
         ┌──────┴──────────┐
         │                 │
     ┌───▼────┐         ┌──▼─────┐
-    │ ClickHouse   │ LLM Ollama
-    │ (Port 8123)  │ (Port 11434)
-    │              │ 
-    │ 390K+        │ DeepSeek-Coder
-    │ Registros    │ Orca-Mini
-    │ Vacinação    │ Neural-Chat
-    └────────┘     │ Mistral
-             │      └────────┘
-└─────────────────┘
+    │ClickHouse       │ Ollama
+    │ Port 8123       │ Port 11434
+    │                 │
+    │ 390K+ Vacinas   │ DeepSeek
+    │ Dengue          │ Orca-Mini
+    │ Influenza       │ Mistral
+    └─────────┘       │ Neural-Chat
+              │       └─────────────┘
 ```
 
-**Stack:**
-- 🔧 **Backend:** FastAPI + Python 3.12
-- 📦 **Database:** ClickHouse (SQL OLAP)
-- 🧠 **LLM:** Ollama (local, sem APIs)
-- 🐳 **Deployment:** Docker Compose
+**Stack Técnico:**
+- **Backend:** FastAPI + Python 3.10+
+- **Database:** ClickHouse (SQL OLAP)
+- **LLM:** Ollama (local, sem APIs externas)
+- **Deployment:** Docker Compose
+- **Multi-Dataset:** Arquitetura escalável
 
 ---
 
 ## 📋 Pré-requisitos
 
-Antes de começar, você precisa de:
-
 - ✅ **Docker Desktop** ([Download](https://www.docker.com/products/docker-desktop))
-- ✅ **Docker Compose** (vem com Docker Desktop)
 - ✅ **Python 3.10+** ([Download](https://www.python.org))
-- ✅ **Git** (opcional, para clonar - [Download](https://git-scm.com))
-- ✅ **~15 GB de espaço livre** (para LLM models + dados)
+- ✅ **Git** (opcional - [Download](https://git-scm.com))
+- ✅ **15 GB de espaço livre** (modelos LLM + dados)
 
-**Verifique se tudo está instalado:**
+**Verificar instalação:**
 ```powershell
 docker --version
 docker-compose --version
 python --version
-git --version
 ```
 
 ---
 
-## 🚀 Guia de Setup Completo (Passo a Passo)
+## 🚀 Setup em 6 Passos
 
-### 1️⃣ Clone o Repositório
+### 1️⃣ Clonar Repositório
 
 ```powershell
-# Windows PowerShell
-git clone https://github.com/seu-usuario/easydatasus.git
-cd easydatasus
+git clone https://github.com/Jinkogule/EasyDataSUS.git
+cd EasyDataSUS
 ```
-
-Ou se não tiver Git, faça download do ZIP e extraia.
 
 ---
 
-### 2️⃣ Suba o Docker Compose
+### 2️⃣ Iniciar Docker Containers
 
-**Inicie o ClickHouse:**
-
+**ClickHouse (Banco de Dados):**
 ```powershell
 docker-compose up -d clickhouse
-```
-
-**Aguarde o ClickHouse iniciar (15-30 segundos):**
-
-```powershell
 docker-compose logs clickhouse
 ```
+✅ Pronto quando ver: `Server started`
 
-✅ Pronto quando ver:
-```
-<Information> Application: Listening for TCP connections on [::]:9000
-<Information> Application: Server started
-```
-
-**Suba o Ollama:**
-
+**Ollama (LLM):**
 ```powershell
 docker-compose up -d ollama
-```
-
-**Aguarde Ollama iniciar (30-60 segundos):**
-
-```powershell
 docker-compose logs ollama
 ```
+✅ Pronto quando ver: `Loaded run context`
 
-✅ Pronto quando ver:
-```
-Loaded run context
-```
-
-**Verifique status:**
-
+**Verificar:**
 ```powershell
 docker-compose ps
 ```
 
-Deve mostrar:
-```
-STATUS  NAMES
-Up      easydatasus-clickhouse
-Up      easydatasus-ollama
-```
-
 ---
 
-### 3️⃣ Prepare o Ambiente Python
-
-**Abra PowerShell na pasta `backend`:**
+### 3️⃣ Ambiente Python
 
 ```powershell
 cd backend
-```
 
-**Crie um virtual environment:**
-
-```powershell
+# Virtual environment
 python -m venv venv
-```
+.\venv\Scripts\Activate.ps1  # Windows PowerShell
 
-**Ative o virtual environment:**
+# Se der erro: Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 
-```powershell
-# Windows PowerShell
-.\venv\Scripts\Activate.ps1
-
-# Se der erro "não permitido", execute:
-# Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
-```
-
-**Instale as dependências:**
-
-```powershell
+# Instalar dependências
 pip install -r requirements.txt
 ```
 
-**Configure as variáveis de ambiente (.env):**
-
-```powershell
-# Copie o arquivo de exemplo (se existir)
-Copy-Item .env.example .env -ErrorAction SilentlyContinue
-
-# Ou crie manualmente
-```
-
-**Crie o arquivo `.env` com:**
-
+**Criar `.env`:**
 ```env
-# ClickHouse
 CLICKHOUSE_HOST=localhost
 CLICKHOUSE_PORT=8123
 CLICKHOUSE_USER=admin
 CLICKHOUSE_PASSWORD=admin
 CLICKHOUSE_DATABASE=default
 
-# Ollama Local
 OLLAMA_HOST=http://localhost:11434
 OLLAMA_MODEL=deepseek-coder:6.7b-base-q4_K_M
+OLLAMA_TIMEOUT=180
 
-# FastAPI
 FASTAPI_HOST=0.0.0.0
 FASTAPI_PORT=8000
 FASTAPI_LOG_LEVEL=INFO
@@ -209,120 +145,85 @@ FASTAPI_LOG_LEVEL=INFO
 
 ---
 
-### 4️⃣ Baixe os Modelos LLM
+### 4️⃣ Baixar Modelos LLM
 
-**Opção A: Apenas DeepSeek (4.1 GB, ~50s latência)**
+⏳ **IMPORTANTE:** Pode levar **5-15 minutos**. Aguarde!
 
 ```powershell
+# Opção A: DeepSeek (qualidade alta, 4.1GB)
 docker exec easydatasus-ollama ollama pull deepseek-coder:6.7b-base-q4_K_M
-```
 
-**Opção B: Instalar vários modelos (recomendado)**
-
-```powershell
-# Orca Mini (rápido, ~2GB, 10s latência)
+# Opção B: Orca Mini (rápido, 2GB - recomendado se RAM < 8GB)
 docker exec easydatasus-ollama ollama pull orca-mini
 
-# Neural Chat (balanço, ~4.7GB, 40s latência)
+# Opção C: Múltiplos modelos
 docker exec easydatasus-ollama ollama pull neural-chat
-
-# Mistral (qualidade, ~4GB, 30s latência)
 docker exec easydatasus-ollama ollama pull mistral
 ```
 
-**Verifique modelos instalados:**
-
+**Verificar:**
 ```powershell
 docker exec easydatasus-ollama ollama list
 ```
 
+**🔥 Warmup do Ollama (OBRIGATÓRIO):**
+```powershell
+docker exec easydatasus-ollama ollama run deepseek-coder:6.7b-base-q4_K_M "Hello"
+```
+
+⚠️ Primeiro request é lento (30-60s), depois melhora.
+
 ---
 
-### 5️⃣ Carregue os Dados de Vacinação
+### 5️⃣ Carregar Dados
 
-**Carregue o CSV no ClickHouse:**
-
+**Opção A: CLI (Recomendado)**
 ```powershell
-# Dentro de backend/ com venv ativo
 python etl/load_csv.py
 ```
 
-**Você deve ver:**
-
-```
-Conectando ao ClickHouse...
-✓ Conexão OK
-
-Carregando CSV...
-✓ 390.911 linhas inseridas com sucesso!
-
-Distribuição por estado:
-  AC: 376.290
-  RO: 4.272
-  AM: 3.504
-  ... outros estados ...
-
-✓ Tabela 'vacinacao' pronta com 390.911 registros
-```
-
-**Verifique os dados no ClickHouse:**
-
+**Opção B: Upload via API**
 ```powershell
-curl -X POST "http://localhost:8123/" `
-  -u admin:admin `
-  -d "SELECT COUNT(*) as total FROM vacinacao"
+curl -X POST "http://localhost:8000/api/admin/datasets/upload?dataset=vacinacao-covid" `
+  -F "file=@seu-arquivo.csv"
 ```
 
-Deve retornar: `390911`
+**Opção C: Manual**
+Coloque arquivo em: `backend/data/datasets/vacinacao-covid/seu-arquivo.csv`
+Depois: `python etl/load_csv.py`
 
 ---
 
-### 6️⃣ Inicie o Backend
-
-**Dentro de `backend/` com venv ativo:**
+### 6️⃣ Iniciar Backend
 
 ```powershell
 python main.py
 ```
 
-**Você deve ver:**
-
-```
-INFO:     Uvicorn running on http://0.0.0.0:8000
-INFO:     Application startup complete
-```
+✅ Pronto em: `Uvicorn running on http://0.0.0.0:8000`
 
 ---
 
-## 🧪 Teste o Sistema
+## 🧪 Testes Rápidos
 
-**Em outro terminal PowerShell, dentro de `backend/`:**
-
-### Teste 1: Health Check
-
+**Health Check:**
 ```powershell
 curl http://localhost:8000/health
 ```
 
-**Resposta esperada:**
-```json
-{"status":"ok","service":"EasyDataSUS"}
-```
-
-### Teste 2: Fazer uma Pergunta
-
+**Fazer Pergunta:**
 ```powershell
 $body = @{
     question = "Quantas vacinas em SP?"
     model = "deepseek-coder:6.7b-base-q4_K_M"
 } | ConvertTo-Json
 
-curl -X POST http://localhost:8000/api/ask `
+curl -X POST "http://localhost:8000/api/ask" `
   -Headers @{"Content-Type"="application/json"} `
   -Body $body
 ```
 
-**Resposta esperada:**
+**Resposta Esperada:**
 ```json
 {
   "success": true,
@@ -332,391 +233,431 @@ curl -X POST http://localhost:8000/api/ask `
 }
 ```
 
-### Teste 3: Usar Outro Modelo
-
-```powershell
-$body = @{
-    question = "Quantas vacinas por estado?"
-    model = "orca-mini"
-} | ConvertTo-Json
-
-curl -X POST http://localhost:8000/api/ask `
-  -Headers @{"Content-Type"="application/json"} `
-  -Body $body
-```
-
 ---
 
-## 📚 Exemplos de Perguntas
+## 📤 Upload de Dados (API)
 
-| Pergunta | Resultado |
-|----------|-----------|
-| Quantas vacinas em SP? | 824 doses |
-| Quantas vacinas em AC? | 376.290 doses |
-| Qual vacina mais aplicada? | [Resultado agrupado] |
-| Vacinas por estado? | Tabela com distribuição |
-| Quantas no mês de Março? | [Resultado filtrado] |
-
----
-
-## 🎛️ Gerenciar Modelos
-
-**Ver todos os modelos disponíveis:**
-
-```powershell
-docker exec easydatasus-ollama ollama list
+### URL Base
+```
+POST /api/admin/datasets/upload
 ```
 
-**Baixar um novo modelo:**
-
-```powershell
-docker exec easydatasus-ollama ollama pull neural-chat
+### Com cURL
+```bash
+curl -X POST "http://localhost:8000/api/admin/datasets/upload?dataset=vacinacao-covid" \
+  -F "file=@vacina-sp.csv"
 ```
 
-**Testar um modelo específico:**
+### Com Python
+```python
+import requests
 
-```powershell
-$body = @{
-    question = "Quantas vacinas?"
-    model = "neural-chat"
-} | ConvertTo-Json
-
-curl -X POST http://localhost:8000/api/ask `
-  -Headers @{"Content-Type"="application/json"} `
-  -Body $body
+response = requests.post(
+    'http://localhost:8000/api/admin/datasets/upload',
+    params={'dataset': 'vacinacao-covid'},
+    files={'file': open('data.csv', 'rb')}
+)
+print(response.json())
 ```
 
-**Remover um modelo (libera espaço):**
+### Com JavaScript/React
+```javascript
+const formData = new FormData();
+formData.append('file', fileInput.files[0]);
+
+fetch('http://localhost:8000/api/admin/datasets/upload?dataset=vacinacao-covid', {
+  method: 'POST',
+  body: formData
+})
+.then(r => r.json())
+.then(data => console.log(data))
+```
+
+### Resposta
+```json
+{
+  "success": true,
+  "dataset": "vacinacao-covid",
+  "filename": "data.csv",
+  "rows_loaded": 390911,
+  "message": "Dataset carregado com sucesso!"
+}
+```
+
+### Validações Automáticas
+- ✅ Schema matching (colunas esperadas)
+- ✅ Tipo de dados
+- ✅ Campos obrigatórios
+- ✅ Delimitador semicolon
+
+### Outros Endpoints Admin
 
 ```powershell
-docker exec easydatasus-ollama ollama rm mistral
+# Validar sem upload
+curl -X POST "http://localhost:8000/api/admin/datasets/validate?dataset=vacinacao-covid" `
+  -F "file=@seu-arquivo.csv"
+
+# Listar datasets
+curl http://localhost:8000/api/admin/datasets/available
+
+# Info de dataset
+curl http://localhost:8000/api/admin/datasets/vacinacao-covid/info
+
+# Deletar arquivo
+curl -X DELETE "http://localhost:8000/api/admin/datasets/vacinacao-covid/files/vacina-sp.csv"
+
+# Recarregar dataset
+curl -X POST "http://localhost:8000/api/admin/datasets/vacinacao-covid/reload"
 ```
 
 ---
 
 ## 🐛 Troubleshooting
 
-### ❌ Erro: "Cannot GET / (ClickHouse connection refused)"
+### ❌ Ollama retorna erro 500
 
-**Solução:**
+**Diagnóstico (execute em ordem):**
+
+1️⃣ **Está rodando?**
+```powershell
+docker ps | findstr ollama
+```
+Se não → `docker-compose up -d ollama`
+
+2️⃣ **Modelo carregado?**
+```powershell
+docker exec easydatasus-ollama ollama list
+```
+Se vazio → Baixe modelo novamente
+
+3️⃣ **Logs completos:**
+```powershell
+docker logs easydatasus-ollama -f
+```
+
+**Soluções (tente em ordem):**
+
+**Solução 1: Reiniciar**
+```powershell
+docker-compose down ollama
+Start-Sleep -Seconds 10
+docker-compose up -d ollama
+Start-Sleep -Seconds 30
+```
+
+**Solução 2: Verificar memória**
+```powershell
+docker stats easydatasus-ollama --no-stream
+```
+Se "Out of Memory" → use `orca-mini` em `.env`
+
+**Solução 3: Aumentar timeout**
+```env
+OLLAMA_TIMEOUT=300
+```
+Reinicie: `python main.py`
+
+**Solução 4: Limpar cache**
+```powershell
+docker-compose down ollama
+docker volume prune -f
+docker-compose up -d ollama
+docker exec easydatasus-ollama ollama pull orca-mini
+```
+
+**System has automatic retry:** Tenta 3x automaticamente. Veja logs do backend.
+
+---
+
+### ❌ ClickHouse connection refused
 
 ```powershell
-# Verifique se ClickHouse está rodando
-docker-compose ps clickhouse
-
-# Se não estiver, reinicie
-docker-compose up -d clickhouse
-
-# Aguarde 30 segundos e tente novamente
 docker-compose logs clickhouse
 ```
+Se "Server started" → Conexão OK
+Se não → Reinicie: `docker-compose down clickhouse && docker-compose up -d clickhouse`
 
 ---
 
-### ❌ Erro: "Connection refused (Ollama: 11434)"
-
-**Solução:**
+### ❌ CSV validation failed
 
 ```powershell
-# Inicie Ollama
-docker-compose up -d ollama
+# Verifique schema esperado
+cat backend/metadata/datasets/vacinacao-covid/schema.json
 
-# Aguarde iniciar
-Start-Sleep -Seconds 30
-
-# Verifique
-docker-compose logs ollama
-
-# Baixe o modelo novamente se necessário
-docker exec easydatasus-ollama ollama pull deepseek-coder:6.7b-base-q4_K_M
+# Seu CSV tem todas as colunas?
+# Delimitador é semicolon (;)?
+# Sem linhas vazias no meio?
 ```
 
 ---
 
-### ❌ Erro: "CSV load failed"
-
-**Solução:**
+### ❌ PowerShell: "Cannot execute script"
 
 ```powershell
-# Verifique se arquivo existe
-Test-Path ".\data\vacinacao-ac-es.csv"
-
-# Se não existir, faça download de https://datasus.gov.br
-# ou use dados de exemplo
-
-# Verifique logs
-python etl/load_csv.py
-
-# Teste conexão ClickHouse
-curl -X POST "http://localhost:8123/" -u admin:admin -d "SHOW TABLES"
-```
-
----
-
-### ❌ Erro: "SQL inválido / sem resultados"
-
-**Solução:**
-
-```powershell
-# Verifique logs do backend (saída do terminal)
-# Deve mostrar: "DEBUG: SQL extraído: SELECT ..."
-
-# Teste uma query manual
-curl -X POST "http://localhost:8123/" `
-  -u admin:admin `
-  -d "SELECT TOP 5 * FROM vacinacao"
-
-# Verifique se tabela existe
-curl -X POST "http://localhost:8123/" `
-  -u admin:admin `
-  -d "DESCRIBE TABLE vacinacao"
-```
-
----
-
-### ❌ Erro: "Timeout aguardando resposta do LLM"
-
-**Solução:**
-
-```powershell
-# Verifique se modelo está rodando
-docker exec easydatasus-ollama ollama list
-
-# Se não aparecer, baixe
-docker exec easydatasus-ollama ollama pull deepseek-coder:6.7b-base-q4_K_M
-
-# Aguarde finalizar (pode levar 10-15 min)
-docker-compose logs ollama
-
-# Verifique se container tem RAM suficiente
-# Modelos precisam de ~8GB RAM disponível
-```
-
----
-
-### ❌ PowerShell: "Não é possível carregar arquivo de script"
-
-**Solução:**
-
-```powershell
-# Execute uma vez
 Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
-
-# Depois
-.\venv\Scripts\Activate.ps1
 ```
 
 ---
 
-## 🛑 Parar o Sistema
-
-**Parar todos os containers:**
+### ❌ Python module not found
 
 ```powershell
-docker-compose down
+pip install -r requirements.txt
 ```
 
-**Parar apenas ClickHouse (manter Ollama):**
+---
 
+## 🎛️ Gerenciar Modelos LLM
+
+**Ver disponíveis:**
 ```powershell
-docker-compose stop clickhouse
+docker exec easydatasus-ollama ollama list
 ```
 
-**Limpar volumes e dados (cuidado!):**
-
+**Baixar novo:**
 ```powershell
-docker-compose down -v
+docker exec easydatasus-ollama ollama pull mistral
+```
+
+**Testar modelo:**
+```powershell
+$body = @{
+    question = "Quantas vacinas?"
+    model = "mistral"
+} | ConvertTo-Json
+
+curl -X POST "http://localhost:8000/api/ask" `
+  -Headers @{"Content-Type"="application/json"} `
+  -Body $body
+```
+
+**Remover (libera 4GB+):**
+```powershell
+docker exec easydatasus-ollama ollama rm mistral
+```
+
+**Comparação de Modelos:**
+
+| Modelo | Tamanho | Velocidade | Qualidade | RAM Mín |
+|--------|---------|-----------|-----------|---------|
+| orca-mini | 2GB | ⚡⚡⚡ | ⭐⭐ | 4GB |
+| neural-chat | 4.7GB | ⚡⚡ | ⭐⭐⭐ | 6GB |
+| deepseek-coder | 6.7GB | ⚡ | ⭐⭐⭐⭐ | 8GB |
+| mistral | 4GB | ⚡⚡ | ⭐⭐⭐⭐ | 6GB |
+
+---
+
+## 📊 Adicionar Novo Dataset
+
+**1. Criar estrutura:**
+```
+backend/metadata/datasets/seu-dataset/
+  └── schema.json
+
+backend/data/datasets/seu-dataset/
+  └── seu-arquivo.csv
+```
+
+**2. Definir schema** (`schema.json`):
+```json
+{
+  "name": "Seu Dataset",
+  "description": "Descrição",
+  "table_name": "seu_dataset",
+  "columns": [
+    {"name": "id", "type": "Int32"},
+    {"name": "data", "type": "Date"},
+    {"name": "valor", "type": "Float32"}
+  ]
+}
+```
+
+**3. Carregar dados:**
+```powershell
+python etl/load_csv.py
+```
+
+ou via API:
+```powershell
+curl -X POST "http://localhost:8000/api/admin/datasets/upload?dataset=seu-dataset" `
+  -F "file=@seu-arquivo.csv"
 ```
 
 ---
 
-## 📊 Dados Disponíveis
-
-**Tabela:** `vacinacao`
-
-**Registros:** 390.911 doses de vacina
-
-**Distribuição por Estado:**
-- 🟢 AC (Acre): 376.290 registros (96.2%)
-- RO (Rondônia): 4.272 registros
-- AM (Amazonas): 3.504 registros
-- *(27 estados no total)*
-
-**Colunas:** 32 (informações de paciente, vacinação, estabelecimento, etc)
-
-**Período:** Conforme dados do DataSUS
-
----
-
-## 🎯 Próximos Passos
-
-1. **Testar com diferentes modelos** - Compare qualidade e velocidade
-2. **Explorar SCALABILITY.md** - Adicionar novos datasets (internações, óbitos)
-3. **Criar Frontend Web** - Interface para não-desenvolvedores
-4. **GPU Acceleration** - 10x mais rápido com CUDA
-5. **Multi-dataset Support** - Unificar várias fontes DataSUS
-
-Veja `SCALABILITY.md` para detalhes de expansão.
-
----
-
-## ✅ Checklist de Setup
-
-- [ ] Docker Desktop instalado e rodando
-- [ ] `docker-compose ps` mostra ClickHouse + Ollama
-- [ ] Python venv criado e ativado
-- [ ] `pip install -r requirements.txt` executado
-- [ ] `.env` criado com valores corretos
-- [ ] Modelo LLM baixado (`ollama list` mostra modelo)
-- [ ] CSV carregado (`python etl/load_csv.py` OK)
-- [ ] Backend rodando (`python main.py`)
-- [ ] Health check OK (`curl http://localhost:8000/health`)
-- [ ] Pergunta de teste funcionando
-
-Se tudo ✅, você está pronto! 🎉
-
----
-
-## 📖 Estrutura do Projeto
+## 🏗️ Estrutura do Projeto
 
 ```
 backend/
-├── main.py                          # FastAPI app
-├── requirements.txt                 # Dependencies
-├── .env.example                     # Template configuração
-├── test_scalability.py              # Valida datasets
-│
-├── db/
-│   └── clickhouse.py                # Cliente ClickHouse
+├── main.py                              # FastAPI app
+├── requirements.txt                     # Dependências
+├── .env                                 # Configuração
 ├── routes/
-│   ├── query.py                     # POST /ask
-│   └── questions.py                 # GET /questions
+│   ├── query.py                         # POST /ask
+│   ├── questions.py                     # GET /questions
+│   └── admin.py                         # Upload + gerenciamento
 ├── services/
-│   ├── sql_service.py               # Geração SQL
-│   └── interpretation_service.py    # Interpretação LLM
+│   ├── sql_service.py                   # Geração SQL
+│   └── interpretation_service.py        # Interpretação
 ├── llm/
-│   ├── base.py                      # Interface
-│   ├── router.py                    # Seletor
-│   └── ollama_provider.py           # Ollama Provider
-│
-├── 📚 metadata/         (SCHEMAS - ESCALÁVEL)
-│   ├── README_DATASETS.md           # Documentação
-│   ├── loader.py                    # load_metadata(dataset)
-│   └── datasets/
-│       ├── vacinacao-covid/
-│       │   ├── schema.json          # 32 colunas
-│       │   └── README.md
-│       ├── dengue-2024/             # (Futuro)
-│       │   └── schema.json
-│       └── influenza-2025/          # (Futuro)
-│           └── schema.json
-│
-├── 💾 data/             (CSVS - ESCALÁVEL)
-│   ├── README_DATASETS.md           # Documentação
-│   └── datasets/
-│       ├── vacinacao-covid/
-│       │   ├── vacinacao-ac-es.csv  # 390K registros
-│       │   └── README.md
-│       ├── dengue-2024/             # (Futuro)
-│       │   └── dengue-*.csv
-│       └── influenza-2025/          # (Futuro)
-│           └── influenza-*.csv
-│
+│   ├── base.py                          # Interface
+│   ├── router.py                        # Seletor de modelo
+│   ├── ollama_provider.py               # Com retry automático
+│   └── openai_provider.py               # Alternativa
+├── db/
+│   └── clickhouse.py                    # Cliente BD
 ├── etl/
-│   ├── load_csv.py                  # load_csv(dataset)
-│   └── load_csv_v2.py               # Versão alternativa
-│
-└── venv/                            # Environment (ignored)
+│   └── load_csv.py                      # Carregar dados (multi-CSV)
+├── metadata/
+│   ├── loader.py                        # load_metadata()
+│   └── datasets/
+│       ├── vacinacao-covid/
+│       │   ├── schema.json              # 32 colunas
+│       │   └── README.md
+│       ├── dengue-2024/
+│       │   └── schema.json
+│       └── influenza-2025/
+│           └── schema.json
+└── data/
+    ├── datasets/
+    │   ├── vacinacao-covid/
+    │   │   └── vacinacao-ac-es.csv      # 390K registros
+    │   ├── dengue-2024/
+    │   │   └── dados.csv
+    │   └── influenza-2025/
+    │       └── dados.csv
+    └── README_DATASETS.md
 
-docker-compose.yml                  # Infrastructure
-init.sql                            # Schema ClickHouse
-README.md                           # Setup guide
-SCALABILITY_DATASETS.md             # 📚 Guia de escalabilidade
-STRUCTURE_VISUALIZATION.md          # 📊 Visualização
-.env.example                        # Configuração
+docker-compose.yml                      # Infrastructure
+.gitignore                              # Git exclusões
+README.md                               # Este arquivo (centralizado)
+ARCHITECTURE.md                         # Detalhes técnicos
+FRONTEND_INTEGRATION.md                 # React integration
 ```
 
-### 🆕 Estrutura Escalável (v1.1+)
+---
 
-A nova estrutura suporta **múltiplos datasets**:
+## 🔄 Recursos Principais
 
-```python
-# Carrega qualquer dataset
-metadata = load_metadata("vacinacao-covid")    # ✅ Atual
-metadata = load_metadata("dengue-2024")        # 🆕 Futuro
-metadata = load_metadata("influenza-2025")     # 🆕 Futuro
+### ✅ Suportado
+- Multi-dataset (vacinação, dengue, influenza)
+- Upload de CSV com validação
+- Roteamento automático de perguntas
+- Retry logic (3x) para Ollama
+- Fallback inteligente se LLM falhar
+- Modelos intercambiáveis (DeepSeek, Orca, Mistral)
+- Múltiplas perguntas pré-prontas
 
-# Carrega dados automaticamente
-load_csv()                          # vacinacao-covid (padrão)
-load_csv(dataset="dengue-2024")     # dataset específico
+### 🔄 Em Desenvolvimento
+- Frontend Web (React)
+- Dashboard com gráficos
+- Cache de queries
+- Histórico de perguntas
+- Autenticação/autorização
+- GPU acceleration
+- Clustering de dados
+
+---
+
+## 🧑‍💻 Stack Técnico Detalhado
+
+**Backend:**
+- FastAPI 0.104+
+- Pydantic (validação)
+- Python-multipart (uploads)
+- Requests (HTTP)
+
+**Database:**
+- ClickHouse 23+
+- clickhouse-driver
+
+**LLM:**
+- Ollama (local inference)
+- Suporte a OpenAI API (fallback)
+
+**DevOps:**
+- Docker & Docker Compose
+- Git + GitHub
+- Python venv
+
+---
+
+## 🚀 Deployment
+
+Para deploy em produção:
+
+1. **AWS EC2:**
+   - Inicie instância Ubuntu 22.04
+   - Clone repositório
+   - Execute `docker-compose up -d`
+
+2. **Azure:**
+   - Use App Service + Container
+   - Configure environment variables
+
+3. **DigitalOcean:**
+   - Droplet + Docker
+   - Port forwarding necessário
+
+📖 Veja `ARCHITECTURE.md` para detalhes completos
+
+---
+
+## 🆘 Suporte & Debug
+
+**Logs em tempo real:**
+```powershell
+docker-compose logs -f backend
+docker-compose logs -f ollama
+docker-compose logs -f clickhouse
 ```
 
-📖 **Veja [SCALABILITY_DATASETS.md](SCALABILITY_DATASETS.md)** para guia completo de escalabilidade
+**Testar componentes individualmente:**
+```powershell
+# Testar ClickHouse
+curl -X POST "http://localhost:8123/" -u admin:admin -d "SELECT 1"
 
----
+# Testar Ollama
+curl http://localhost:11434/api/tags
 
-## 🚀 Próximos Passos
-
-1. ✅ Setup completo
-2. ✅ Testar com `curl` ou Postman
-3. ✅ **Roteamento por Dataset** - Sistema de perguntas pré-prontas com detecção automática
-4. 🔄 **[TODO]** Frontend Web (React/Vue)
-5. 🔄 **[TODO]** Dashboard com gráficos
-6. 🔄 **[TODO]** Cache de queries
-7. 🔄 **[TODO]** Histórico de perguntas
-
----
-
-## 🎯 Novidade: Roteamento Inteligente por Dataset
-
-O sistema agora suporta **múltiplos datasets** com roteamento automático!
-
-### Perguntas Pré-Prontas
-
-```bash
-# Listar todas as perguntas disponíveis
-curl http://localhost:8000/api/questions
-
-# Listar perguntas de um dataset específico
-curl http://localhost:8000/api/questions/vacinacao-covid
-
-# Executar pergunta pré-pronta (frontend seleciona)
-curl -X POST http://localhost:8000/api/ask \
-  -H "Content-Type: application/json" \
-  -d '{
-    "question": "Quantas vacinas em SP?",
-    "dataset": "vacinacao-covid"
-  }'
-
-# Executar pergunta customizada (detecta dataset)
-curl -X POST http://localhost:8000/api/ask \
-  -H "Content-Type: application/json" \
-  -d '{
-    "question": "Quantos casos de dengue?"
-  }'
+# Testar Backend
+curl http://localhost:8000/health
 ```
 
-📖 **Veja [ROUTING_SUMMARY.md](ROUTING_SUMMARY.md)** para detalhes completos  
-📖 **Veja [FRONTEND_INTEGRATION.md](FRONTEND_INTEGRATION.md)** para integração no frontend
+**Issues do GitHub:**
+https://github.com/Jinkogule/EasyDataSUS/issues
 
 ---
 
-## 📝 Licença
+## 📝 Seções Técnicas
 
-MIT - Use livremente!
+- **[ARCHITECTURE.md](./ARCHITECTURE.md)** - Design técnico, diagramas, fluxos
+- **[FRONTEND_INTEGRATION.md](./FRONTEND_INTEGRATION.md)** - React/Vue integration
+
+---
+
+## 📄 Licença
+
+MIT License - Use livremente em projetos comerciais
 
 ---
 
-## 💬 Suporte
+## 🎉 Pronto para começar?
 
-Se encontrar problemas, verifique:
+```powershell
+# Tudo em um comando
+git clone https://github.com/Jinkogule/EasyDataSUS.git
+cd EasyDataSUS
+docker-compose up -d
+cd backend
+python -m venv venv
+.\venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+python etl/load_csv.py
+python main.py
+```
 
-1. Logs: `docker-compose logs -f clickhouse`
-2. Health: `curl http://localhost:8000/health`
-3. Conectividade: `curl -X POST http://localhost:8123 -u admin:admin -d "SELECT 1"`
-
-4. Arquivo .env configurado corretamente
-
----
+Acesse: http://localhost:8000
 
 **Feito com ❤️ para tornar dados públicos acessíveis a todos!**
