@@ -305,4 +305,67 @@ def load_csv(csv_path: str = None, dataset: str = "covid-19-vacinacao"):
         sys.exit(1)
 
 if __name__ == "__main__":
-    load_csv()  # Carrega TODOS os CSVs da estrutura padrão: data/datasets/covid-19-vacinacao/
+    import argparse
+    
+    parser = argparse.ArgumentParser(
+        description="Carregar CSVs de datasets para ClickHouse",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+EXEMPLOS:
+  python load_csv.py                              # Carrega covid-19-vacinacao (padrão)
+  python load_csv.py --dataset dengue-2024       # Carrega dengue-2024
+  python load_csv.py --dataset influenza-2025    # Carrega influenza-2025
+  python load_csv.py --all                        # Carrega TODOS os datasets
+  python load_csv.py --file /path/to/custom.csv  # Carrega arquivo customizado
+        """
+    )
+    
+    parser.add_argument(
+        '--dataset',
+        type=str,
+        default="covid-19-vacinacao",
+        help='Dataset a carregar (padrão: covid-19-vacinacao)'
+    )
+    parser.add_argument(
+        '--file',
+        type=str,
+        default=None,
+        help='Caminho de arquivo específico a carregar'
+    )
+    parser.add_argument(
+        '--all',
+        action='store_true',
+        help='Carregar TODOS os datasets encontrados em data/datasets/'
+    )
+    
+    args = parser.parse_args()
+    
+    if args.all:
+        # Descobrir e carregar todos os datasets
+        datasets_path = Path(__file__).parent.parent / "data" / "datasets"
+        datasets = [d.name for d in datasets_path.iterdir() if d.is_dir()]
+        
+        if not datasets:
+            logger.error(f"Nenhum dataset encontrado em {datasets_path}")
+            sys.exit(1)
+        
+        logger.info(f"Carregando {len(datasets)} dataset(s): {', '.join(datasets)}\n")
+        for dataset in sorted(datasets):
+            logger.info(f"\n{'='*70}")
+            logger.info(f"INICIANDO: {dataset}")
+            logger.info(f"{'='*70}\n")
+            try:
+                load_csv(dataset=dataset)
+            except SystemExit:
+                logger.error(f"Erro ao carregar {dataset}, continuando com próximo...")
+                continue
+        
+        logger.info(f"\n{'='*70}")
+        logger.info(f"CARGA COMPLETA DE TODOS OS DATASETS")
+        logger.info(f"{'='*70}")
+    else:
+        # Carregar dataset específico ou arquivo
+        if args.file:
+            load_csv(csv_path=args.file, dataset=args.dataset)
+        else:
+            load_csv(dataset=args.dataset)
