@@ -23,7 +23,7 @@ router = APIRouter()
 # Isso permite roteamento automático e escalabilidade
 
 PREBUILT_QUESTIONS = {
-    "vacinacao-covid": {
+    "covid-19-vacinacao": {
         "theme_color": "",
         "theme_name": "Vacinação COVID-19",
         "description": "Dados de vacinação contra COVID-19 no Brasil",
@@ -190,7 +190,7 @@ def list_all_questions(
     **Exemplos:**
     
     - `GET /api/questions` - Lista perguntas de todos os datasets
-    - `GET /api/questions?dataset=vacinacao-covid` - Apenas perguntas de vacinação
+    - `GET /api/questions?dataset=covid-19-vacinacao` - Apenas perguntas de vacinação
     - `GET /api/questions?dataset=dengue-2024` - Apenas perguntas de dengue
     
     **Proposito:**
@@ -204,7 +204,7 @@ def list_all_questions(
       "total_datasets": 3,
       "datasets": [
         {
-          "dataset_id": "vacinacao-covid",
+          "dataset_id": "covid-19-vacinacao",
           "theme_color": "",
           "theme_name": "Vacinação COVID-19",
           "description": "Dados de vacinação...",
@@ -257,16 +257,16 @@ def get_dataset_questions(dataset_id: str):
     Retorna todas as perguntas pré-prontas para um dataset específico.
     
     **Path Parameters:**
-    - `dataset_id`: ID do dataset (ex: "vacinacao-covid", "dengue-2024")
+    - `dataset_id`: ID do dataset (ex: "covid-19-vacinacao", "dengue-2024")
     
     **Exemplos:**
-    - `GET /api/questions/vacinacao-covid`
+    - `GET /api/questions/covid-19-vacinacao`
     - `GET /api/questions/dengue-2024`
     
     **Resposta:**
     ```json
     {
-      "dataset_id": "vacinacao-covid",
+      "dataset_id": "covid-19-vacinacao",
       "theme_color": "",
       "theme_name": "Vacinação COVID-19",
       "description": "...",
@@ -307,7 +307,7 @@ def get_categories_by_dataset(dataset_id: str):
     **Resposta:**
     ```json
     {
-      "dataset_id": "vacinacao-covid",
+      "dataset_id": "covid-19-vacinacao",
       "categories": [
         {
           "name": "Quantidade Total",
@@ -366,14 +366,14 @@ def detect_dataset_for_question(question: str = Query(..., description="Pergunta
     
     **Exemplos:**
     - `POST /api/questions/detect-dataset?question=Quantas vacinas em SP?`
-      → Resultado: vacinacao-covid
+      → Resultado: covid-19-vacinacao
     - `POST /api/questions/detect-dataset?question=Quantos casos de dengue?`
       → Resultado: dengue-2024
     
     **Resposta:**
     ```json
     {
-      "detected_dataset": "vacinacao-covid",
+      "detected_dataset": "covid-19-vacinacao",
       "confidence": 0.95,
       "keywords": ["vacina", "aplicadas", "SP"],
       "alternatives": [...]
@@ -385,7 +385,7 @@ def detect_dataset_for_question(question: str = Query(..., description="Pergunta
     
     # Mapa de palavras-chave para datasets
     keywords_map = {
-        "vacinacao-covid": [
+        "covid-19-vacinacao": [
             "vacina", "vacinação", "covid", "doses", "imunização", "aplicadas",
             "fabricante", "lote", "injeção", "imunivo", "pfizer", "astrazeneca"
         ],
@@ -460,7 +460,7 @@ def get_available_datasets():
     **Resposta:**
     ```json
     {
-      "available_datasets": ["vacinacao-covid", "dengue-2024"],
+      "available_datasets": ["covid-19-vacinacao", "dengue-2024"],
       "count": 2,
       "with_prebuilt_questions": 2
     }

@@ -6,17 +6,17 @@ Este arquivo mapeia dataset → table_name e fornece utilidades centralizadas.
 """
 
 DATASETS_CONFIG = {
-    "vacinacao-covid": {
+    "covid-19-vacinacao": {
         "table_name": "vacinacao",
         "description": "Vacinação COVID-19 no Brasil",
     },
-    "dengue-2024": {
-        "table_name": "dengue",
-        "description": "Casos de Dengue registrados em 2024",
+    "registro-de-ocupacao-hospitalar-covid-19": {
+        "table_name": "registro_de_ocupacao_hospitalar_covid_19",
+        "description": "Registro de ocupação hospitalar COVID-19",
     },
-    "influenza-2025": {
-        "table_name": "influenza",
-        "description": "Casos de Influenza registrados em 2025",
+    "arboviroses-febre-de-chikungunya": {
+        "table_name": "arboviroses_febre_de_chikungunya",
+        "description": "Casos de febre de chikungunya no Brasil",
     },
 }
 
@@ -26,17 +26,17 @@ def get_table_name(dataset: str) -> str:
     Retorna nome da tabela para um dataset.
     
     Args:
-        dataset: ID do dataset (ex: "vacinacao-covid")
+        dataset: ID do dataset (ex: "covid-19-vacinacao")
     
     Returns:
-        Nome da tabela no ClickHouse (ex: "vacinacao")
+        Nome da tabela no ClickHouse (ex: "covid_19_vacinacao")
     
     Raises:
         ValueError: Se dataset não está configurado
     
     Exemplo:
-        >>> get_table_name("vacinacao-covid")
-        "vacinacao"
+        >>> get_table_name("covid-19-vacinacao")
+        "covid_19_vacinacao"
         >>> get_table_name("dengue-2024")
         "dengue"
     """
@@ -71,7 +71,7 @@ def list_available_datasets() -> list:
     
     Exemplo:
         >>> list_available_datasets()
-        ["vacinacao-covid", "dengue-2024", "influenza-2025"]
+        ["covid-19-vacinacao", "dengue-2024", "influenza-2025"]
     """
     return list(DATASETS_CONFIG.keys())
 

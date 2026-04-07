@@ -7,7 +7,7 @@ Esta pasta contém os **arquivos de dados (CSVs)** para cada dataset suportado p
 ```
 data/
 └── datasets/
-    ├── vacinacao-covid/
+    ├── covid-19-vacinacao/
     │   ├── vacinacao-ac-es.csv  # Data file (390K+ registros)
     │   └── README.md             # Documentação
     ├── dengue-2024/              # (Futuro)
@@ -21,7 +21,7 @@ data/
 ```python
 from etl.load_csv import load_csv
 
-# Carrega o dataset padrão (vacinacao-covid)
+# Carrega o dataset padrão (covid-19-vacinacao)
 load_csv()
 
 # Carrega um dataset específico
@@ -77,7 +77,7 @@ DOC-002;PAC-002;32;...
 
 | Dataset | Arquivo | Status | Registros |
 |---------|---------|--------|-----------|
-| `vacinacao-covid` | vacinacao-ac-es.csv | ✅ Ativo | 390.911+ |
+| `covid-19-vacinacao` | vacinacao-ac-es.csv | ✅ Ativo | 390.911+ |
 | `dengue-2024` | dengue-ac-es.csv | ⏳ Planejado | TBD |
 | `influenza-2025` | influenza-ac-es.csv | ⏳ Planejado | TBD |
 
@@ -100,14 +100,14 @@ DOC-002;PAC-002;32;...
 ```python
 # 1. Carregar dados
 from etl.load_csv import load_csv
-load_csv(dataset="vacinacao-covid")
+load_csv(dataset="covid-19-vacinacao")
 
 # 2. Usar em queries
 from services.sql_service import generate_sql
 from db.clickhouse import run_query
 from metadata.loader import load_metadata
 
-metadata = load_metadata("vacinacao-covid")
+metadata = load_metadata("covid-19-vacinacao")
 sql = "SELECT COUNT(*) FROM vacinacao WHERE paciente_endereco_uf='SP'"
 result = run_query(sql)
 print(result)  # [824]

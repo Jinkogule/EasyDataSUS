@@ -54,7 +54,7 @@ def sanitize_sql(sql: str) -> str:
     return sql
 
 
-def is_valid_sql(sql: str, dataset: str = "vacinacao-covid") -> bool:
+def is_valid_sql(sql: str, dataset: str = "covid-19-vacinacao") -> bool:
     """
     Valida SQL de forma mais rigorosa.
     
@@ -68,7 +68,7 @@ def is_valid_sql(sql: str, dataset: str = "vacinacao-covid") -> bool:
         dataset: Dataset esperado (para validar referência à tabela correta)
     
     Dataset→Tabela Mapping:
-        - vacinacao-covid → vacinacao
+        - covid-19-vacinacao → vacinacao
         - dengue-2024 → dengue
         - influenza-2025 → influenza
     """
@@ -91,7 +91,7 @@ def is_valid_sql(sql: str, dataset: str = "vacinacao-covid") -> bool:
     
     # Mapear dataset → tabela esperada
     dataset_table_map = {
-        "vacinacao-covid": "vacinacao",
+        "covid-19-vacinacao": "vacinacao",
         "dengue-2024": "dengue",
         "influenza-2025": "influenza"
     }
@@ -131,7 +131,7 @@ def ask(req: AskRequest):
     **Fluxo:**
     1. Se dataset fornecido: usa diretamente
     2. Se não, tenta detectar do conteúdo da pergunta
-    3. Se falhar detecção, usa "vacinacao-covid" (padrão histórico)
+    3. Se falhar detecção, usa "covid-19-vacinacao" (padrão histórico)
     
     **Exemplos com frontend:**
     ```json
@@ -139,7 +139,7 @@ def ask(req: AskRequest):
     {
       "question": "Quantas vacinas foram aplicadas em SP?",
       "model": "deepseek-local",
-      "dataset": "vacinacao-covid"
+      "dataset": "covid-19-vacinacao"
     }
     
     // Pergunta customizada (detecção automática)
@@ -158,7 +158,7 @@ def ask(req: AskRequest):
     
     try:
         # Determinar dataset a usar
-        dataset_to_use = req.dataset or "vacinacao-covid"
+        dataset_to_use = req.dataset or "covid-19-vacinacao"
         
         # Se dataset não foi fornecido, tentar detectar
         if not req.dataset:
@@ -271,7 +271,7 @@ def _detect_dataset_for_question(question: str) -> Optional[str]:
     
     # Mapa de palavras-chave para datasets
     keywords_map = {
-        "vacinacao-covid": [
+        "covid-19-vacinacao": [
             "vacina", "vacinação", "covid", "doses", "imunização", "aplicadas",
             "fabricante", "lote", "injeção", "pfizer", "astrazeneca", "dose"
         ],

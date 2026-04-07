@@ -35,13 +35,13 @@ def get_clickhouse_client():
         logger.error(f"Erro ao conectar ao ClickHouse: {e}")
         sys.exit(1)
 
-def table_exists(client, dataset: str = "vacinacao-covid"):
+def table_exists(client, dataset: str = "covid-19-vacinacao"):
     """
     Verifica se tabela do dataset existe no ClickHouse.
     
     Args:
         client: Cliente ClickHouse
-        dataset: Dataset a verificar (padrão: "vacinacao-covid")
+        dataset: Dataset a verificar (padrão: "covid-19-vacinacao")
     
     Returns:
         True se tabela existe, False caso contrário
@@ -53,7 +53,7 @@ def table_exists(client, dataset: str = "vacinacao-covid"):
     except Exception:
         return False
 
-def load_csv(csv_path: str = None, dataset: str = "vacinacao-covid"):
+def load_csv(csv_path: str = None, dataset: str = "covid-19-vacinacao"):
     """
     Carrega CSV(s) para ClickHouse usando TSV format.
     Suporta múltiplos arquivos na mesma pasta!
@@ -61,13 +61,13 @@ def load_csv(csv_path: str = None, dataset: str = "vacinacao-covid"):
     Args:
         csv_path (str): Caminho completo de um arquivo CSV.
                        Se None, carrega TODOS os CSVs em data/datasets/{dataset}/
-        dataset (str): Nome do dataset. Padrão: "vacinacao-covid"
-                      Exemplos: "vacinacao-covid", "dengue-2024", "influenza-2025"
+        dataset (str): Nome do dataset. Padrão: "covid-19-vacinacao"
+                      Exemplos: "covid-19-vacinacao", "dengue-2024", "influenza-2025"
     
     Estrutura esperada de dados (suporta múltiplos CSVs):
         data/
         └── datasets/
-            ├── vacinacao-covid/
+            ├── covid-19-vacinacao/
             │   ├── vacinacao-ac-es.csv
             │   ├── vacinacao-sp-mg.csv
             │   └── vacinacao-rs.csv
@@ -78,7 +78,7 @@ def load_csv(csv_path: str = None, dataset: str = "vacinacao-covid"):
                 └── influenza-ac-es.csv
     
     Uso:
-        load_csv()  # Carrega TODOS os CSVs em vacinacao-covid/
+        load_csv()  # Carrega TODOS os CSVs em covid-19-vacinacao/
         load_csv(dataset="dengue-2024")  # Carrega TODOS em dengue-2024/
         load_csv("/path/to/custom.csv", "custom")  # Carrega apenas esse arquivo
     """
@@ -305,4 +305,4 @@ def load_csv(csv_path: str = None, dataset: str = "vacinacao-covid"):
         sys.exit(1)
 
 if __name__ == "__main__":
-    load_csv()  # Carrega TODOS os CSVs da estrutura padrão: data/datasets/vacinacao-covid/
+    load_csv()  # Carrega TODOS os CSVs da estrutura padrão: data/datasets/covid-19-vacinacao/

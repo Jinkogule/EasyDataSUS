@@ -1,26 +1,26 @@
 import json
 from pathlib import Path
 
-def load_metadata(dataset: str = "vacinacao-covid") -> str:
+def load_metadata(dataset: str = "covid-19-vacinacao") -> str:
     """
     Carrega metadados (schema) de um dataset específico.
     
     Args:
         dataset (str): Nome do dataset dentro de metadata/datasets/
-                      Padrão: "vacinacao-covid"
+                      Padrão: "covid-19-vacinacao"
     
     Returns:
         str: JSON formatado com metadados do dataset
     
     Exemplos:
-        load_metadata()  # Usa vacinacao-covid
+        load_metadata()  # Usa covid-19-vacinacao
         load_metadata("dengue-2024")  # Carrega dengue-2024
         load_metadata("influenza-2025")  # Carrega influenza-2025
     
     Estrutura esperada:
         metadata/
         └── datasets/
-            ├── vacinacao-covid/
+            ├── covid-19-vacinacao/
             │   └── schema.json
             ├── dengue-2024/
             │   └── schema.json
