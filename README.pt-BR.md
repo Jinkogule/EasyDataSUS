@@ -1,6 +1,5 @@
 <div align="center">
 <h1>EasyDataSUS</h1>
-<p><strong>🚀 Sistema NLP para Consultas em Linguagem Natural sobre Dados de Saúde Pública</strong></p>
 
 [![Release](https://img.shields.io/github/v/release/Jinkogule/EasyDataSUS?style=for-the-badge)](https://github.com/Jinkogule/EasyDataSUS/releases)
 [![License](https://img.shields.io/github/license/Jinkogule/EasyDataSUS?style=for-the-badge)](LICENSE)
@@ -24,11 +23,11 @@
 
 ## 💻 Sobre o Projeto
 
-**EasyDataSUS** é um sistema inteligente de consultas desenvolvido para democratizar o acesso a dados de saúde pública do Brasil (DataSUS). O sistema permite que usuários façam perguntas em **português natural** sobre dados de saúde, gerando automaticamente consultas SQL, executando-as em um banco de dados analítico (ClickHouse) e retornando respostas inteligentes interpretadas por modelos de linguagem locais (Ollama).
+O **EasyDataSUS** é um sistema de consultas desenvolvido para facilitar o acesso e a utilização de dados públicos de saúde no Brasil, especialmente por gestores e profissionais que não possuem formação técnica em análise de dados.
 
-O projeto implementa conceitos como desenvolvimento de APIs com FastAPI, suporte a arquitetura multi-dataset, processamento de linguagem natural e design de sistemas escaláveis. O sistema suporta múltiplos temas de dados de saúde (vacinação, dengue, influenza) e permite integração perfeita de novos datasets através de um sistema de configuração centralizado.
+O sistema permite que perguntas sejam feitas em linguagem natural, realizando automaticamente a tradução para consultas SQL, a execução em uma base de dados analítica e a apresentação dos resultados de forma interpretada. Dessa forma, reduz-se a necessidade de conhecimento técnico sobre estrutura de bases de dados ou linguagens de consulta. A solução foi projetada com uma arquitetura escalável e suporte a múltiplos conjuntos de dados relacionados à saúde.
 
-**Objetivo**: Tornar dados públicos de saúde acessíveis a qualquer pessoa sem exigir conhecimento técnico em SQL, democratizando o acesso a informações críticas de saúde.
+Este projeto foi desenvolvido a fim de avaliar uma ferramenta que reduza as barreiras técnicas no uso de dados públicos em saúde, permitindo que gestores, pesquisadores e cidadãos obtenham informações relevantes a partir de dados do DataSUS. Além disso, o projeto investiga o impacto de diferentes modelos de linguagem e estruturas de metadados na qualidade e precisão das respostas geradas.
 
 ## 📋 Documentação
 
