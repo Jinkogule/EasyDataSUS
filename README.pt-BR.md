@@ -1,7 +1,6 @@
 <div align="center">
 <h1>EasyDataSUS</h1>
 
-[![Release](https://img.shields.io/github/v/release/Jinkogule/EasyDataSUS?style=for-the-badge)](https://github.com/Jinkogule/EasyDataSUS/releases)
 [![License](https://img.shields.io/github/license/Jinkogule/EasyDataSUS?style=for-the-badge)](LICENSE)
 ![Status](https://img.shields.io/badge/STATUS-MVP%20|%20EM%20VALIDAÇÃO-brightgreen?style=for-the-badge)
 </div>

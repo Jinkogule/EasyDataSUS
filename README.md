@@ -1,7 +1,6 @@
 <div align="center">
 <h1>EasyDataSUS</h1>
 
-[![Release](https://img.shields.io/github/v/release/Jinkogule/EasyDataSUS?style=for-the-badge)](https://github.com/Jinkogule/EasyDataSUS/releases)
 [![License](https://img.shields.io/github/license/Jinkogule/EasyDataSUS?style=for-the-badge)](LICENSE)
 ![Status](https://img.shields.io/badge/STATUS-MVP%20|%20IN%20VALIDATION-brightgreen?style=for-the-badge)
 </div>
@@ -31,10 +30,7 @@ This project was developed to evaluate a tool that reduces technical barriers to
 
 ## 📋 Documentation
 
--   **[Complete Setup Guide](./docs/README_COMPLETO.md)** - Step-by-step installation and configuration
--   **[System Architecture](./docs/ARCHITECTURE.md)** - Technical design and system flows
--   **[File Structure](./docs/ESTRUCTURA_ARQUIVOS_SISTEMA.md)** - Detailed component documentation
--   **[Multi-Dataset Setup](./docs/ESCALABILIDADE_MULTI_TEMAS.md)** - How to add new health themes
+-   **[Wiki](https://github.com/Jinkogule/EasyDataSUS/wiki)**
 
 ## 🧑‍💻 Development
 
