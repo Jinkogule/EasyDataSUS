@@ -2,89 +2,151 @@
 <h1>EasyDataSUS</h1>
 <p><strong>🚀 Sistema NLP para Consultas em Linguagem Natural sobre Dados de Saúde Pública</strong></p>
 
-[![Status](https://img.shields.io/badge/STATUS-MVP%20|%20EM%20VALIDAÇÃO-brightgreen?style=for-the-badge)](https://github.com/Jinkogule/EasyDataSUS)
+[![Release](https://img.shields.io/github/v/release/Jinkogule/EasyDataSUS?style=for-the-badge)](https://github.com/Jinkogule/EasyDataSUS/releases)
 [![License](https://img.shields.io/github/license/Jinkogule/EasyDataSUS?style=for-the-badge)](LICENSE)
-[![Python](https://img.shields.io/badge/Python-3.10%2B-blue?style=for-the-badge&logo=python)](https://www.python.org)
-[![Docker](https://img.shields.io/badge/Docker-Compose-blue?style=for-the-badge&logo=docker)](https://www.docker.com)
-
-[🇺🇸 English](./README.md)
-
+![Status](https://img.shields.io/badge/STATUS-MVP%20|%20EM%20VALIDAÇÃO-brightgreen?style=for-the-badge)
 </div>
+
+<p align="center">
+  <a href="#-sobre-o-projeto">Sobre</a> •
+  <a href="#-documentação">Documentação</a> •
+  <a href="#-desenvolvimento">Desenvolvimento</a> •
+  <a href="#-tecnologias">Tecnologias</a> •
+  <a href="#-executar-o-projeto-localmente">Executar localmente</a> •
+  <a href="#-autores">Autores</a> •
+  <a href="#-licença">Licença</a>
+  <br>
+  <a href="./README.md">English</a> •
+  <a href="./README.pt-BR.md">Português (BR)</a>
+</p>
 
 ---
 
-### 💻 Sobre o Projeto
+## 💻 Sobre o Projeto
 
-**EasyDataSUS** é um sistema inteligente de consultas que permite fazer perguntas em **português natural** sobre dados de saúde pública do Brasil (DataSUS). O sistema gera automaticamente consultas SQL, executa em um banco de dados analítico (ClickHouse) e retorna respostas interpretadas por modelos de linguagem locais (Ollama).
+**EasyDataSUS** é um sistema inteligente de consultas desenvolvido para democratizar o acesso a dados de saúde pública do Brasil (DataSUS). O sistema permite que usuários façam perguntas em **português natural** sobre dados de saúde, gerando automaticamente consultas SQL, executando-as em um banco de dados analítico (ClickHouse) e retornando respostas inteligentes interpretadas por modelos de linguagem locais (Ollama).
 
-**Objetivo:** Tornar dados públicos de saúde acessíveis a qualquer pessoa, sem necessidade de conhecimento técnico em SQL.
+O projeto implementa conceitos como desenvolvimento de APIs com FastAPI, suporte a arquitetura multi-dataset, processamento de linguagem natural e design de sistemas escaláveis. O sistema suporta múltiplos temas de dados de saúde (vacinação, dengue, influenza) e permite integração perfeita de novos datasets através de um sistema de configuração centralizado.
 
-### 📋 Documentação
+**Objetivo**: Tornar dados públicos de saúde acessíveis a qualquer pessoa sem exigir conhecimento técnico em SQL, democratizando o acesso a informações críticas de saúde.
 
-- **[Setup Guia Completo](./docs/README_COMPLETO.md)** - Instruções passo-a-passo
-- **[Arquitetura do Sistema](./docs/ARCHITECTURE.md)** - Diagramas e fluxos
-- **[Estrutura de Arquivos](./docs/ESTRUCTURA_ARQUIVOS_SISTEMA.md)** - Papel de cada componente
-- **[Multi-Dataset](./docs/ESCALABILIDADE_MULTI_TEMAS.md)** - Como adicionar novos temas
+## 📋 Documentação
 
-### 🧑‍💻 Desenvolvimento
+-   **[Guia Completo de Setup](./docs/README_COMPLETO.md)** - Instruções passo-a-passo de instalação e configuração
+-   **[Arquitetura do Sistema](./docs/ARCHITECTURE.md)** - Design técnico e fluxos do sistema
+-   **[Estrutura de Arquivos](./docs/ESTRUCTURA_ARQUIVOS_SISTEMA.md)** - Documentação detalhada de componentes
+-   **[Setup Multi-Dataset](./docs/ESCALABILIDADE_MULTI_TEMAS.md)** - Como adicionar novos temas de saúde
 
-- **[Código Fonte](https://github.com/Jinkogule/EasyDataSUS)**
-- **[Rastreamento de Issues](https://github.com/Jinkogule/EasyDataSUS/issues)**
+## 🧑‍💻 Desenvolvimento
 
-### 🛠 Tecnologias
+-   **[Código Fonte](https://github.com/Jinkogule/EasyDataSUS)**
+-   **[Rastreamento de Issues](https://github.com/Jinkogule/EasyDataSUS/issues)**
 
-#### **Backend** (Python + FastAPI)
-- **[Python 3.10+](https://www.python.org)**
-- **[FastAPI 0.104.1](https://fastapi.tiangolo.com/)**
+## 🛠 Tecnologias
 
-#### **Banco de Dados**
-- **[ClickHouse 24.3.3](https://clickhouse.com/)** - OLAP para TimeSeries
+### **Backend (API)**
 
-#### **Modelos de Linguagem**
-- **[Ollama 0.2.0](https://ollama.ai/)** - Inferência Local
-  - DeepSeek Coder (SQL)
-  - Mistral (Rápido)
-  - Neural Chat (Português)
-  - Orca Mini (Leve)
+-   **[Python 3.10+](https://www.python.org)**
+-   **[FastAPI 0.104.1](https://fastapi.tiangolo.com/)**
 
-#### **Infraestrutura**
-- **[Docker & Docker Compose](https://www.docker.com/)** - Containerização
+### **Banco de Dados**
 
-### 🎯 Quick Start
+-   **[ClickHouse 24.3.3](https://clickhouse.com/)** - Banco de Dados OLAP TimeSeries
 
-#### 1. **Clonar & Setup**
+### **Modelos de Linguagem**
+
+-   **[Ollama 0.2.0](https://ollama.ai/)** - Inferência Local de LLM
+    - DeepSeek Coder 6.7B (geração de SQL)
+    - Mistral 7B (inferência rápida)
+    - Neural Chat (otimizado para português)
+    - Orca Mini (leve)
+
+### **Infraestrutura**
+
+-   **[Docker & Docker Compose](https://www.docker.com/)** - Containerização e orquestração
+
+## ⚙ Executar o Projeto Localmente
+
+### **Pré-requisitos**
+
+Antes de começar, certifique-se de:
+
+-   Instalar **[Git](https://git-scm.com/)**.
+-   Instalar **[Docker Desktop](https://www.docker.com/products/docker-desktop/)** (inclui Docker Compose).
+-   Instalar **[Python 3.10+](https://www.python.org/)**.
+-   Ter **15 GB de espaço livre em disco** (para modelos LLM + banco de dados).
+-   Verificar as instalações:
+    ```bash
+    docker --version
+    docker-compose --version
+    python --version
+    ```
+
+### **Executando a Aplicação**
+
+1. **Clone este repositório**
 ```bash
 git clone https://github.com/Jinkogule/EasyDataSUS.git
 cd EasyDataSUS
-docker-compose up -d
 ```
 
-#### 2. **Ambiente Python**
+2. **Inicie os containers Docker (ClickHouse + Ollama)**
+```bash
+docker-compose up -d
+docker-compose logs -f
+```
+
+3. **Configure o ambiente Python**
 ```bash
 cd backend
 python -m venv venv
-.\venv\Scripts\Activate.ps1  # Windows
+.\venv\Scripts\Activate.ps1  # Windows PowerShell
+# ou
+source venv/bin/activate     # Linux/Mac
 pip install -r requirements.txt
 ```
 
-#### 3. **Baixar Modelo**
+4. **Crie a configuração .env**
 ```bash
-docker exec easydatasus-ollama ollama pull deepseek-coder:6.7b-base-q4_K_M
+# Crie o arquivo backend/.env com:
+CLICKHOUSE_HOST=localhost
+CLICKHOUSE_PORT=8123
+CLICKHOUSE_USER=admin
+CLICKHOUSE_PASSWORD=admin
+CLICKHOUSE_DATABASE=default
+
+OLLAMA_HOST=http://localhost:11434
+OLLAMA_MODEL=deepseek-coder:6.7b-base-q4_K_M
+OLLAMA_TIMEOUT=180
+
+FASTAPI_HOST=localhost
+FASTAPI_PORT=8000
 ```
 
-#### 4. **Iniciar Sistema**
+5. **Baixe o modelo LLM**
+```bash
+docker exec easydatasus-ollama ollama pull deepseek-coder:6.7b-base-q4_K_M
+# Pode levar 5-15 minutos dependendo da sua conexão
+```
+
+6. **Carregue o dataset inicial**
+```bash
+python etl/load_csv.py
+```
+
+7. **Inicie o backend**
 ```bash
 python main.py
 ```
 
-#### 5. **Fazer Pergunta**
+8. **Teste o sistema**
 ```bash
 curl -X POST "http://localhost:8000/api/ask" \
   -H "Content-Type: application/json" \
   -d '{"question": "Quantas vacinas foram aplicadas em SP?"}'
 ```
 
-**Resposta:**
+Resposta esperada:
 ```json
 {
   "sql": "SELECT COUNT(*) FROM vacinacao WHERE paciente_endereco_uf = 'SP'",
@@ -92,47 +154,26 @@ curl -X POST "http://localhost:8000/api/ask" \
 }
 ```
 
-### 📊 Datasets Suportados
-
-| Dataset | Status | Registros |
-|---------|--------|-----------|
-| 🩺 Vacinação COVID-19 | ✅ Ativo | 390K+ |
-| 🦟 Dengue 2024 | 🏗️ Estrutura Pronta | 0 |
-| 🤒 Influenza 2025 | 🏗️ Estrutura Pronta | 0 |
-
-### ✨ Recursos Principais
-
-- ✅ **Roteamento Automático** - Detecta dataset pela pergunta
-- ✅ **Multi-Modelo LLM** - Compare diferentes modelos
-- ✅ **SQL Seguro** - Validação contra injeção
-- ✅ **Retry Automático** - 3x tentativas com backoff
-- ✅ **Upload de Dados** - API para adicionar novos datasets
-- ✅ **Arquitetura Escalável** - Suporte a múltiplos temas
-
-### 🔄 Roadmap
-
-- 🚀 Frontend Web (React)
-- 📊 Dashboard com Gráficos
-- 🔐 Autenticação
-- 🧪 Testes Automatizados
-- 📈 Análises Multi-Dataset
-
-### ✒️ Autor
-
-**Lucas Pimenta**
-- [GitHub](https://github.com/Jinkogule)
-- [LinkedIn](https://linkedin.com/in/lucas-pimenta)
-
-### 📝 Licença
-
-MIT License - Use livremente em projetos comerciais
-
 ---
 
-<div align="center">
+## ✒ Autores
 
-**Feito com ❤️ para tornar dados públicos de saúde acessíveis a todos!**
+<table>
+  <tr>
+    <td align="center">
+      Lucas Pimenta
+      <br>
+      <a href="https://github.com/Jinkogule">
+        <img src="https://avatars.githubusercontent.com/u/52849575?v=4" width="100px;" alt="Lucas Pimenta"/>
+      </a>
+      <br>
+      <a href="https://github.com/Jinkogule">
+        <img src="https://img.shields.io/badge/-Github-black?style=flat-square&logo=Github&logoColor=white">
+      </a>
+    </td>
+  </tr>
+</table>
 
-[↑ Voltar ao Topo](#easydatasus)
+## 📝 Licença
 
-</div>
+Este projeto está licenciado sob a licença **[MIT](./LICENSE)**.
