@@ -32,10 +32,7 @@ O projeto implementa conceitos como desenvolvimento de APIs com FastAPI, suporte
 
 ## 📋 Documentação
 
--   **[Guia Completo de Setup](./docs/README_COMPLETO.md)** - Instruções passo-a-passo de instalação e configuração
--   **[Arquitetura do Sistema](./docs/ARCHITECTURE.md)** - Design técnico e fluxos do sistema
--   **[Estrutura de Arquivos](./docs/ESTRUCTURA_ARQUIVOS_SISTEMA.md)** - Documentação detalhada de componentes
--   **[Setup Multi-Dataset](./docs/ESCALABILIDADE_MULTI_TEMAS.md)** - Como adicionar novos temas de saúde
+-   **[Wiki](https://github.com/Jinkogule/EasyDataSUS/wiki)**
 
 ## 🧑‍💻 Desenvolvimento
 
@@ -82,7 +79,7 @@ Antes de começar, certifique-se de:
     python --version
     ```
 
-### **Executando a Aplicação**
+### **Rodando a Aplicação**
 
 1. **Clone este repositório**
 ```bash
@@ -90,10 +87,14 @@ git clone https://github.com/Jinkogule/EasyDataSUS.git
 cd EasyDataSUS
 ```
 
-2. **Inicie os containers Docker (ClickHouse + Ollama)**
+2. **Inicie os containers Docker**
 ```bash
 docker-compose up -d
-docker-compose logs -f
+```
+
+Verificar status:
+```bash
+docker-compose ps
 ```
 
 3. **Configure o ambiente Python**
@@ -101,14 +102,11 @@ docker-compose logs -f
 cd backend
 python -m venv venv
 .\venv\Scripts\Activate.ps1  # Windows PowerShell
-# ou
-source venv/bin/activate     # Linux/Mac
 pip install -r requirements.txt
 ```
 
-4. **Crie a configuração .env**
-```bash
-# Crie o arquivo backend/.env com:
+Crie o arquivo `.env`:
+```env
 CLICKHOUSE_HOST=localhost
 CLICKHOUSE_PORT=8123
 CLICKHOUSE_USER=admin
@@ -123,23 +121,25 @@ FASTAPI_HOST=localhost
 FASTAPI_PORT=8000
 ```
 
-5. **Baixe o modelo LLM**
+4. **Baixe o modelo LLM**
 ```bash
 docker exec easydatasus-ollama ollama pull deepseek-coder:6.7b-base-q4_K_M
-# Pode levar 5-15 minutos dependendo da sua conexão
 ```
 
-6. **Carregue o dataset inicial**
+Warmup (OBRIGATÓRIO):
+```bash
+docker exec easydatasus-ollama ollama run deepseek-coder:6.7b-base-q4_K_M "Hello"
+```
+
+5. **Carregue dados e inicie**
 ```bash
 python etl/load_csv.py
-```
-
-7. **Inicie o backend**
-```bash
 python main.py
 ```
 
-8. **Teste o sistema**
+✅ Sistema pronto em: `http://localhost:8000/docs`
+
+6. **Teste o sistema**
 ```bash
 curl -X POST "http://localhost:8000/api/ask" \
   -H "Content-Type: application/json" \
@@ -153,8 +153,6 @@ Resposta esperada:
   "insight": "Em São Paulo foram aplicadas 824.915 doses de vacina."
 }
 ```
-
----
 
 ## ✒ Autores
 
@@ -176,4 +174,4 @@ Resposta esperada:
 
 ## 📝 Licença
 
-Este projeto está licenciado sob a licença **[MIT](./LICENSE)**.
+Este projeto está sob a licença **[MIT](./LICENSE)**.

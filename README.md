@@ -90,10 +90,14 @@ git clone https://github.com/Jinkogule/EasyDataSUS.git
 cd EasyDataSUS
 ```
 
-2. **Start Docker containers (ClickHouse + Ollama)**
+2. **Start Docker containers**
 ```bash
 docker-compose up -d
-docker-compose logs -f
+```
+
+Verify status:
+```bash
+docker-compose ps
 ```
 
 3. **Setup Python environment**
@@ -101,14 +105,11 @@ docker-compose logs -f
 cd backend
 python -m venv venv
 .\venv\Scripts\Activate.ps1  # Windows PowerShell
-# or
-source venv/bin/activate     # Linux/Mac
 pip install -r requirements.txt
 ```
 
-4. **Create .env configuration**
-```bash
-# Create backend/.env file with:
+Create `.env`:
+```env
 CLICKHOUSE_HOST=localhost
 CLICKHOUSE_PORT=8123
 CLICKHOUSE_USER=admin
@@ -123,23 +124,25 @@ FASTAPI_HOST=localhost
 FASTAPI_PORT=8000
 ```
 
-5. **Download LLM model**
+4. **Download LLM model**
 ```bash
 docker exec easydatasus-ollama ollama pull deepseek-coder:6.7b-base-q4_K_M
-# This may take 5-15 minutes depending on your connection
 ```
 
-6. **Load initial dataset**
+Warmup (REQUIRED):
+```bash
+docker exec easydatasus-ollama ollama run deepseek-coder:6.7b-base-q4_K_M "Hello"
+```
+
+5. **Load dataset and start**
 ```bash
 python etl/load_csv.py
-```
-
-7. **Start the backend**
-```bash
 python main.py
 ```
 
-8. **Test the system**
+✅ System ready at: `http://localhost:8000`
+
+6. **Test the system**
 ```bash
 curl -X POST "http://localhost:8000/api/ask" \
   -H "Content-Type: application/json" \
