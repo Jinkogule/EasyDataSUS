@@ -24,11 +24,11 @@
 
 ## 💻 About the Project
 
-**EasyDataSUS** is an intelligent query system developed to help democratize access to public health data from Brazil (DataSUS). The system allows users to ask questions in **natural Portuguese** about health data, automatically generating SQL queries, executing them in an analytical database (ClickHouse), and returning intelligent answers interpreted by local language models (Ollama).
+**EasyDataSUS** is a query system developed to facilitate access to and utilization of public health data in Brazil, especially for managers and professionals who do not have technical training in data analysis.
 
-The project implements concepts such as API development with FastAPI, multi-dataset architecture support, natural language processing, and scalable system design. The system supports multiple health data themes (vaccination, dengue, influenza) and allows seamless integration of new datasets through a centralized configuration system.
+The system allows questions to be asked in natural language, automatically translating them into SQL queries, executing them against an analytical database, and presenting the results in an interpreted format. This reduces the need for technical knowledge about database structures or query languages. The solution was designed with a scalable architecture and support for multiple health-related datasets.
 
-**Goal**: Make public health data accessible to anyone without requiring technical SQL knowledge, democratizing access to critical health information.
+This project was developed to evaluate a tool that reduces technical barriers to the use of public health data, enabling managers, researchers, and citizens to obtain relevant information from DataSUS data. Additionally, the project investigates the impact of different language models and metadata structures on the quality and accuracy of generated responses.
 
 ## 📋 Documentation
 
