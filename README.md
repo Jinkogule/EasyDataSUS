@@ -1,6 +1,5 @@
 <div align="center">
 <h1>EasyDataSUS</h1>
-<p><strong>🚀 NLP System for Natural Language Queries on Public Health Data</strong></p>
 
 [![Release](https://img.shields.io/github/v/release/Jinkogule/EasyDataSUS?style=for-the-badge)](https://github.com/Jinkogule/EasyDataSUS/releases)
 [![License](https://img.shields.io/github/license/Jinkogule/EasyDataSUS?style=for-the-badge)](LICENSE)
