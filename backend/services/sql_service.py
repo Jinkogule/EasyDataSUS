@@ -30,17 +30,20 @@ def extract_sql(text: str) -> str:
             return sql
     
     # 2. Extract SELECT ... pattern (mais específico e robusto)
-    # Procura por SELECT ... até LIMIT, fim de linha, ou backtick
+    # Procura por SELECT até uma quebra natural: fim de parágrafo (dupla quebra), backtick, ou fim do texto
     match = re.search(
-        r"(SELECT\s+.+?(?:LIMIT\s+\d+)?)\s*(?:```|\n\n|$)",
+        r"(SELECT\s+.+?)(?:\n\n|```|$)",
         text,
         re.DOTALL | re.IGNORECASE
     )
     if match:
-        sql = match.group(1).strip().rstrip('`')
+        sql = match.group(1).strip().rstrip('`').rstrip()
+        # Remover qualquer explicação ou comentário no final
+        sql = sql.split('\n\n')[0].strip()
+        
         # Validar que tem WHERE com comparação se necessário
         if "WHERE" in sql.upper():
-            # Se tem WHERE, deve ter = ou IN ou LIKE
+            # Se tem WHERE, deve ter = ou IN ou LIKE ou comparador
             if not any(op in sql.upper() for op in [" = ", " IN ", " LIKE ", " > ", " < "]):
                 logger.warning(f"SQL tem WHERE mas sem operador de comparação: {sql[:100]}")
                 return None
@@ -192,47 +195,34 @@ SELECT AVG(paciente_idade) as idade_media FROM vacinacao
 Pergunta: Qual é a idade mínima e máxima?
 SELECT MIN(paciente_idade) as minima, MAX(paciente_idade) as maxima FROM vacinacao
         """,
-        "dengue-2024": """
-EXEMPLO 1 - Total de casos:
-Pergunta: Quantos casos de dengue foram registrados?
-SELECT COUNT(*) FROM dengue
+        "leitos": """
+EXEMPLO 1 - Capacidade total:
+Pergunta: Qual é a capacidade total de leitos?
+SELECT SUM(LEITOS_EXISTENTES) as total_leitos FROM leitos
 
-EXEMPLO 2 - Por estado:
-Pergunta: Qual estado teve mais casos?
-SELECT estado_uf, COUNT(*) as total FROM dengue GROUP BY estado_uf ORDER BY total DESC LIMIT 10
+EXEMPLO 2 - Leitos por estado:
+Pergunta: Qual estado tem mais leitos?
+SELECT UF, SUM(LEITOS_EXISTENTES) as total_leitos FROM leitos GROUP BY UF ORDER BY total_leitos DESC
 
-EXEMPLO 3 - Óbitos:
-Pergunta: Quantos óbitos por dengue?
-SELECT COUNT(*) FROM dengue WHERE desfecho = 'Óbito'
+EXEMPLO 3 - Leitos SUS por estado:
+Pergunta: Qual é a cobertura SUS por estado?
+SELECT UF, SUM(LEITOS_EXISTENTES) as leitos_total, SUM(LEITOS_SUS) as leitos_sus, ROUND((SUM(LEITOS_SUS) / SUM(LEITOS_EXISTENTES)) * 100, 2) as percentual_sus FROM leitos GROUP BY UF ORDER BY percentual_sus DESC
 
-EXEMPLO 4 - Por tipo:
-Pergunta: Quantos casos de DENV1?
-SELECT COUNT(*) FROM dengue WHERE tipo_dengue = 'DENV1'
+EXEMPLO 4 - UTI disponível:
+Pergunta: Quantos leitos de UTI adulto estão disponíveis pelo SUS?
+SELECT SUM(UTI_ADULTO_SUS) as uti_adulto_sus FROM leitos
 
-EXEMPLO 5 - Série temporal:
-Pergunta: Evolução mensal de dengue:
-SELECT toYYYYMM(data_notificacao) as mes, COUNT(*) as total FROM dengue GROUP BY mes ORDER BY mes
-        """,
-        "influenza-2025": """
-EXEMPLO 1 - Total de casos:
-Pergunta: Quantos casos de gripe?
-SELECT COUNT(*) FROM influenza
+EXEMPLO 5 - UTI especializada com filtro:
+Pergunta: Quais cidades têm UTI neonatal?
+SELECT MUNICIPIO, UF, UTI_NEONATAL_EXIST FROM leitos WHERE UTI_NEONATAL_EXIST > 0 ORDER BY MUNICIPIO LIMIT 100
 
-EXEMPLO 2 - Por tipo:
-Pergunta: Quantos H1N1?
-SELECT COUNT(*) FROM influenza WHERE tipo = 'H1N1'
+EXEMPLO 6 - Por tipo de gestão:
+Pergunta: Qual é a distribuição de leitos por tipo de gestão?
+SELECT TP_GESTAO, SUM(LEITOS_EXISTENTES) as total_leitos, SUM(LEITOS_SUS) as leitos_sus FROM leitos GROUP BY TP_GESTAO ORDER BY total_leitos DESC
 
-EXEMPLO 3 - Por estado:
-Pergunta: Quantos casos em SP?
-SELECT COUNT(*) FROM influenza WHERE estado_uf = 'SP'
-
-EXEMPLO 4 - Comparação por tipo:
-Pergunta: Qual tipo mais frequente?
-SELECT tipo, COUNT(*) as total FROM influenza GROUP BY tipo ORDER BY total DESC
-
-EXEMPLO 5 - Por mês:
-Pergunta: Evolução mensal:
-SELECT toYYYYMM(data_notificacao) as mes, COUNT(*) as total FROM influenza GROUP BY mes ORDER BY mes
+EXEMPLO 7 - UTI por região:
+Pergunta: Qual região tem mais leitos de UTI?
+SELECT REGIAO, SUM(UTI_TOTAL_EXIST) as uti_total FROM leitos GROUP BY REGIAO ORDER BY uti_total DESC
         """,
     }
     
@@ -277,27 +267,25 @@ REGRAS OBRIGATÓRIAS PARA VACINAÇÃO:
 12. Não use LIKE com % - use = para exatidão
 13. Se resultado tiver muitas linhas, use LIMIT 100
         """,
-        "dengue-2024": """
-REGRAS OBRIGATÓRIAS PARA DENGUE:
-1. Se pergunta menciona "casos" → use COUNT(*)
-2. Se pergunta menciona estado → use estado_uf
-3. Se pergunta menciona município → use municipio
-4. Se pergunta menciona "óbitos" ou "mortes" → filtre WHERE desfecho = 'Óbito'
-5. Se pergunta menciona tipo (DENV1, DENV2, etc) → filtre com tipo_dengue
-6. Se pergunta menciona data/período → use data_notificacao
-7. Use toYYYYMM() para agrupar por mês
-8. Respeite maiúsculas ('SP', 'DENV1')
-9. Se resultado tiver muitas linhas, use LIMIT 100
-        """,
-        "influenza-2025": """
-REGRAS OBRIGATÓRIAS PARA INFLUENZA:
-1. Se pergunta tem "quantas" ou "casos" → use COUNT(*)
-2. Se pergunta menciona estado → use estado_uf
-3. Se pergunta menciona tipo (H1N1, H3N2, B) → filtre com tipo
-4. Se pergunta menciona período/data → use data_notificacao
-5. Respeite maiúsculas (H1N1, H3N2)
-6. Use GROUP BY por tipo para comparação
-7. Use LIMIT 100 para resultados grandes
+        "leitos": """
+REGRAS OBRIGATÓRIAS PARA LEITOS:
+1. Se pergunta menciona "leitos" genericamente → use LEITOS_EXISTENTES
+2. Se pergunta menciona "leitos SUS" → use LEITOS_SUS
+3. Se pergunta menciona "UTI" → use UTI_TOTAL_EXIST ou UTI_TOTAL_SUS
+4. Se pergunta menciona "UTI adulto" → use UTI_ADULTO_EXIST ou UTI_ADULTO_SUS
+5. Se pergunta menciona "UTI pediátrica" → use UTI_PEDIATRICO_EXIST ou UTI_PEDIATRICO_SUS
+6. Se pergunta menciona "UTI neonatal" → use UTI_NEONATAL_EXIST ou UTI_NEONATAL_SUS
+7. Se pergunta menciona "UTI queimados" → use UTI_QUEIMADO_EXIST ou UTI_QUEIMADO_SUS
+8. Se pergunta menciona "UTI coronariana" → use UTI_CORONARIANA_EXIST ou UTI_CORONARIANA_SUS
+9. SEMPRE use SUM() para qualquer coluna de leitos (LEITOS_*, UTI_*) quando agrupar por estado/região/município
+10. Se pergunta menciona "qual tem mais", "qual estado", "ranking" com leitos → use SUM() + GROUP BY + ORDER BY DESC
+11. Se pergunta menciona estado → use UF
+12. Se pergunta menciona região → use REGIAO
+13. Se pergunta menciona cidade/município → use MUNICIPIO
+14. Se pergunta menciona "tipo de gestão" → use TP_GESTAO
+15. Para calcular percentual SUS → (SUM(LEITOS_SUS) / SUM(LEITOS_EXISTENTES)) * 100
+16. NUNCA use COUNT(*) para contar leitos - sempre use SUM() em colunas de capacidade
+17. Use LIMIT 100 para resultados grandes
         """,
     }
     
@@ -355,12 +343,15 @@ INSTRUÇÃO CRÍTICA:
 - Comece direto com SELECT
 
 PADRÕES IMPORTANTES:
-✓ "Qual estado teve MAIS..." → GROUP BY estado ORDER BY DESC
+✓ "Qual estado teve MAIS..." → GROUP BY estado ORDER BY DESC + SUM() para números
 ✓ "Quantas..." → COUNT(*)
 ✓ "Por estado..." → GROUP BY estado
 ✓ "Quantas em SP..." → COUNT(*) WHERE estado = 'SP'
 ✓ "Qual é a idade média..." → AVG(paciente_idade)
 ✓ "Qual é a idade mínima..." → MIN(paciente_idade)
+✓ "Qual estado tem mais LEITOS" → SUM(LEITOS_*) GROUP BY estado ORDER BY DESC
+✓ Para LEITOS: NUNCA use COUNT(*), sempre SUM() em colunas de capacidade
+✓ SEMPRE adicione LIMIT 100 no final quando não usar GROUP BY com agregação
 
 DATASET: {dataset}
 Tabela: {table_name}
@@ -438,6 +429,8 @@ def fallback_sql(question: str, dataset: str = "covid-19-vacinacao") -> str:
         logger.error(f"Dataset inválido no fallback: {dataset}")
         return None
     
+    import re  # Adicionar import aqui para usar em toda a função
+    
     q = question.lower()
     
     # ========== MAPEAMENTO DE COLUNAS POR DATASET ==========
@@ -462,6 +455,24 @@ def fallback_sql(question: str, dataset: str = "covid-19-vacinacao") -> str:
             "semanas": "vacina_dataAplicacao",
             "week": "vacina_dataAplicacao",
         },
+        "leitos": {
+            "estado": "UF",
+            "uf": "UF",
+            "regiao": "REGIAO",
+            "região": "REGIAO",
+            "municipio": "MUNICIPIO",
+            "município": "MUNICIPIO",
+            "cidade": "MUNICIPIO",
+            "leito": "LEITOS_EXISTENTES",
+            "leitos": "LEITOS_EXISTENTES",
+            "sus": "LEITOS_SUS",
+            "uti": "UTI_TOTAL_EXIST",
+            "gestao": "TP_GESTAO",
+            "gestão": "TP_GESTAO",
+            "tipo": "DS_TIPO_UNIDADE",
+            "estabelecimento": "NOME_ESTABELECIMENTO",
+            "hospital": "NOME_ESTABELECIMENTO",
+        },
     }
     
     current_mappings = column_mappings.get(dataset, {})
@@ -469,6 +480,7 @@ def fallback_sql(question: str, dataset: str = "covid-19-vacinacao") -> str:
         "covid-19-vacinacao": "paciente_endereco_uf",
         "dengue-2024": "estado_uf",
         "influenza-2025": "estado_uf",
+        "leitos": "UF",
     }
     groupby_col = groupby_columns.get(dataset, "estado")
     
@@ -492,7 +504,6 @@ def fallback_sql(question: str, dataset: str = "covid-19-vacinacao") -> str:
         if pattern in q:
             # Tentar extrair coluna após "de cada X" ou "por X"
             # Exemplo: "doses de cada fabricante" → fabricante
-            import re
             # Procura por "de cada PALAVRA" ou "por PALAVRA"
             regex_patterns = [
                 r'de cada (\w+)',
@@ -542,8 +553,7 @@ def fallback_sql(question: str, dataset: str = "covid-19-vacinacao") -> str:
                 # Encontrar coluna de data apropriada para o dataset
                 date_columns = {
                     "covid-19-vacinacao": "vacina_dataAplicacao",
-                    "dengue-2024": "data_caso",
-                    "influenza-2025": "data_vacinacao",
+                    "leitos": "COMP",
                 }
                 date_col = date_columns.get(dataset, "data")
                 
@@ -575,6 +585,47 @@ def fallback_sql(question: str, dataset: str = "covid-19-vacinacao") -> str:
             sql = f"SELECT {sql_func}(paciente_idade) as resultado FROM {table_name}"
             return sql
     
+    # ========== DETECTAR PADRÃO: "Quais ... têm" → Listar registros com filtro ==========
+    # Exemplo: "Quais cidades têm UTI neonatal?"
+    if q.startswith("quais") and any(word in q for word in ["têm ", "tem ", "têm", "tem"]):
+        logger.debug("Padrão detectado: 'Quais ... têm' → SELECT com WHERE")
+        
+        # Detectar se é negação ("não têm", "nao tem")
+        has_negation = any(word in q for word in ["não ", "nao ", "sem ", "nenhum"])
+        
+        # Para leitos: se menciona UTI específica, filtrar por >0 ou =0
+        if dataset == "leitos":
+            uti_keywords = {
+                "neonatal": "UTI_NEONATAL_EXIST",
+                "adulto": "UTI_ADULTO_EXIST",
+                "pediátrica": "UTI_PEDIATRICO_EXIST",
+                "pediatrica": "UTI_PEDIATRICO_EXIST",
+                "queimado": "UTI_QUEIMADO_EXIST",
+                "queimados": "UTI_QUEIMADO_EXIST",
+                "coronariana": "UTI_CORONARIANA_EXIST",
+                "uti": "UTI_TOTAL_EXIST",
+            }
+            
+            for uti_type, uti_col in uti_keywords.items():
+                if uti_type in q:
+                    # Decidir condição baseado em negação
+                    condition = "= 0" if has_negation else "> 0"
+                    
+                    # Detectar coluna de retorno (cidades/municípios, estados, etc)
+                    if any(word in q for word in ["cidade", "cidades", "municipio", "municípios"]):
+                        select_col = "DISTINCT MUNICIPIO, UF"
+                        order_col = "MUNICIPIO"
+                    elif any(word in q for word in ["estado", "estados", "uf"]):
+                        select_col = "DISTINCT UF"
+                        order_col = "UF"
+                    else:
+                        select_col = "DISTINCT MUNICIPIO, UF"
+                        order_col = "MUNICIPIO"
+                    
+                    sql = f"SELECT {select_col} FROM {table_name} WHERE {uti_col} {condition} ORDER BY {order_col} LIMIT 5000"
+                    logger.debug(f"Padrão 'Quais ... {'não ' if has_negation else ''}têm {uti_type}' → {sql[:60]}")
+                    return sql
+    
     # ========== DETECTAR PADRÃO: "Qual ... teve MAIS" → GROUP BY DESC ==========
     if any(word in q for word in ["qual", "que"]) and any(word in q for word in ["mais", "maior", "maiores"]):
         # Pergunta de comparação: "Qual estado teve mais casos?"
@@ -585,7 +636,29 @@ def fallback_sql(question: str, dataset: str = "covid-19-vacinacao") -> str:
     elif any(word in q for word in ["quantas", "quantos", "quanto"]) and any(word in q for word in ["em ", "em sp", "em rj", "no ", "na "]):
         # Pergunta com filtro: "Quantas vacinas em SP?"
         logger.debug("Padrão detectado: 'Quantas em [estado]' → WHERE")
-        sql = f"SELECT COUNT(*) as total FROM {table_name} LIMIT 10000"
+        
+        # Extrair o código de estado (ex: "SP" de "em SP")
+        regex_patterns = [
+            r'em\s+([a-z]{2})',      # "em SP", "em RJ"
+            r'no\s+([a-z]{2})',      # "no SP", "no RJ"
+            r'na\s+([a-z]{2})',      # "na SP", "na RJ"
+            r'estado\s+[a-z]*\s+([a-z]{2})',  # "estado de SP", "estado SP"
+        ]
+        
+        estado_code = None
+        for regex in regex_patterns:
+            match = re.search(regex, q, re.IGNORECASE)
+            if match:
+                estado_code = match.group(1).upper()
+                break
+        
+        # Se encontrou estado, adicionar WHERE; senão usar COUNT simples
+        if estado_code:
+            sql = f"SELECT COUNT(*) as total FROM {table_name} WHERE paciente_endereco_uf = '{estado_code}' LIMIT 10000"
+            logger.debug(f"Estado '{estado_code}' extraído → WHERE paciente_endereco_uf = '{estado_code}'")
+        else:
+            sql = f"SELECT COUNT(*) as total FROM {table_name} LIMIT 10000"
+            logger.debug("Nenhum estado extraído, usando COUNT simples")
     
     # ========== DETECTAR PADRÃO: "Quantas total/geral" → COUNT simples ==========
     elif any(word in q for word in ["quantas", "quantos", "quanto", "total", "geral", "contar", "casos"]):

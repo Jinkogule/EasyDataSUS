@@ -66,73 +66,65 @@ PREBUILT_QUESTIONS = {
         ]
     },
     
-    "dengue-2024": {
+    "leitos": {
         "theme_color": "",
-        "theme_name": "Dengue 2024",
-        "description": "Casos de Dengue registrados em 2024",
+        "theme_name": "Leitos Hospitalares",
+        "description": "Dados de leitos disponíveis em hospitais e estabelecimentos de saúde no Brasil",
         "questions": [
             {
-                "id": "den-001",
-                "theme": "Quantidade Total",
-                "question": "Quantos casos de dengue foram registrados em 2024?",
-                "description": "Total de casos de dengue confirmados",
+                "id": "lei-001",
+                "theme": "Capacidade Total",
+                "question": "Qual é a capacidade total de leitos no Brasil?",
+                "description": "Total de leitos existentes em todos os estabelecimentos",
                 "category": "statistics"
             },
             {
-                "id": "den-002",
+                "id": "lei-002",
                 "theme": "Por Estado",
-                "question": "Qual estado teve mais casos de dengue?",
-                "description": "Estado com maior número de casos",
+                "question": "Quantos leitos existem em São Paulo?",
+                "description": "Quantidade total de leitos no estado de SP",
                 "category": "regional"
             },
             {
-                "id": "den-003",
-                "theme": "Por Estado",
-                "question": "Quantos casos de dengue foram registrados em RJ?",
-                "description": "Total de casos no Rio de Janeiro",
-                "category": "regional"
+                "id": "lei-003",
+                "theme": "Cobertura SUS",
+                "question": "Qual é a cobertura SUS de leitos por estado?",
+                "description": "Percentual de leitos disponíveis pelo SUS",
+                "category": "coverage"
             },
             {
-                "id": "den-004",
-                "theme": "Gravidade",
-                "question": "Quantos óbitos por dengue foram registrados?",
-                "description": "Total de mortes confirmadas por dengue",
-                "category": "severity"
+                "id": "lei-004",
+                "theme": "UTI",
+                "question": "Quantos leitos de UTI adulto estão disponíveis pelo SUS?",
+                "description": "Leitos de UTI adulto disponíveis pelo SUS",
+                "category": "specialized"
             },
             {
-                "id": "den-005",
-                "theme": "Evolução",
-                "question": "Como evoluiu o número de casos de dengue ao longo do ano?",
-                "description": "Tendência temporal de novos casos",
-                "category": "temporal"
-            }
-        ]
-    },
-    
-    "influenza-2025": {
-        "theme_color": "",
-        "theme_name": "Influenza 2025",
-        "description": "Casos de Influenza registrados em 2025",
-        "questions": [
-            {
-                "id": "inf-001",
-                "theme": "Quantidade Total",
-                "question": "Quantos casos de influenza foram registrados em 2025?",
-                "description": "Total de casos de influenza confirmados",
-                "category": "statistics"
+                "id": "lei-005",
+                "theme": "UTI Especializada",
+                "question": "Quais cidades têm UTI neonatal?",
+                "description": "Localização de leitos de UTI neonatal",
+                "category": "specialized"
             },
             {
-                "id": "inf-002",
-                "theme": "Por Tipo",
-                "question": "Qual tipo de influenza foi mais prevalente?",
-                "description": "Tipo de influenza (A, B, C) com mais casos",
-                "category": "classification"
+                "id": "lei-006",
+                "theme": "Por Tipo de Gestão",
+                "question": "Qual é a distribuição de leitos por tipo de gestão?",
+                "description": "Comparação entre leitos públicos, privados e filantrópicos",
+                "category": "administration"
             },
             {
-                "id": "inf-003",
+                "id": "lei-007",
+                "theme": "UTI Especializada",
+                "question": "Quantos leitos de UTI queimados existem?",
+                "description": "Leitos especializados em tratamento de queimados",
+                "category": "specialized"
+            },
+            {
+                "id": "lei-008",
                 "theme": "Por Região",
-                "question": "Qual região teve mais casos de influenza?",
-                "description": "Região com maior número de casos",
+                "question": "Qual região do Brasil tem mais leitos de UTI?",
+                "description": "Região com maior capacidade de leitos de UTI",
                 "category": "regional"
             }
         ]
@@ -191,7 +183,7 @@ def list_all_questions(
     
     - `GET /api/questions` - Lista perguntas de todos os datasets
     - `GET /api/questions?dataset=covid-19-vacinacao` - Apenas perguntas de vacinação
-    - `GET /api/questions?dataset=dengue-2024` - Apenas perguntas de dengue
+    - `GET /api/questions?dataset=leitos` - Apenas perguntas sobre leitos hospitalares
     
     **Proposito:**
     - Descoberta: Usuários veem exemplos de perguntas possíveis
@@ -367,8 +359,8 @@ def detect_dataset_for_question(question: str = Query(..., description="Pergunta
     **Exemplos:**
     - `POST /api/questions/detect-dataset?question=Quantas vacinas em SP?`
       → Resultado: covid-19-vacinacao
-    - `POST /api/questions/detect-dataset?question=Quantos casos de dengue?`
-      → Resultado: dengue-2024
+    - `POST /api/questions/detect-dataset?question=Quais cidades têm UTI neonatal?`
+      → Resultado: leitos
     
     **Resposta:**
     ```json
@@ -389,13 +381,10 @@ def detect_dataset_for_question(question: str = Query(..., description="Pergunta
             "vacina", "vacinação", "covid", "doses", "imunização", "aplicadas",
             "fabricante", "lote", "injeção", "imunivo", "pfizer", "astrazeneca"
         ],
-        "dengue-2024": [
-            "dengue", "aedes", "mosquito", "vetor", "epidemia", "surto",
-            "sintomas", "febre", "casos", "óbitos", "confirmados", "arbovirose"
-        ],
-        "influenza-2025": [
-            "influenza", "gripe", "h1n1", "h3n2", "iav", "tipo a", "tipo b",
-            "tosse", "resfriado", "antiviral", "tamiflu"
+        "leitos": [
+            "leito", "leitos", "hospital", "uti", "capacidade", "cama",
+            "camas", "internação", "estabelecimento", "saúde", "clínica",
+            "pronto forro", "pronto-forro", "ocupação", "disponível"
         ]
     }
     

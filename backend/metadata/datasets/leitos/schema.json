@@ -1,0 +1,193 @@
+{
+  "tabela": "leitos",
+  "descricao": "Dados de leitos disponíveis em hospitais e estabelecimentos de saúde no Brasil - DataSUS",
+  "fonte": "DataSUS",
+  "colunas_principais": {
+    "COMP": {
+      "tipo": "String",
+      "descricao": "Competência (período de referência dos dados)"
+    },
+    "REGIAO": {
+      "tipo": "String",
+      "descricao": "Região geográfica do Brasil",
+      "exemplos": ["Norte", "Nordeste", "Centro-Oeste", "Sudeste", "Sul"]
+    },
+    "UF": {
+      "tipo": "String",
+      "descricao": "Unidade Federativa (Estado)",
+      "exemplos": ["SP", "RJ", "MG", "BA", "SC", "RS", "AC", "ES"]
+    },
+    "CO_IBGE": {
+      "tipo": "String",
+      "descricao": "Código IBGE do município"
+    },
+    "MUNICIPIO": {
+      "tipo": "String",
+      "descricao": "Nome do município",
+      "exemplos": ["São Paulo", "Rio de Janeiro", "Belo Horizonte", "Salvador"]
+    },
+    "MOTIVO_DESABILITACAO": {
+      "tipo": "String",
+      "descricao": "Motivo de desabilitação do estabelecimento (se aplicável)"
+    },
+    "CNES": {
+      "tipo": "String",
+      "descricao": "Código Nacional de Estabelecimento de Saúde (CNES)"
+    },
+    "NOME_ESTABELECIMENTO": {
+      "tipo": "String",
+      "descricao": "Nome do estabelecimento de saúde"
+    },
+    "RAZAO_SOCIAL": {
+      "tipo": "String",
+      "descricao": "Razão social da instituição responsável"
+    },
+    "TP_GESTAO": {
+      "tipo": "String",
+      "descricao": "Tipo de gestão",
+      "exemplos": ["Pública", "Privada", "Filantrópica", "Estadual", "Municipal", "Federal"]
+    },
+    "CO_TIPO_UNIDADE": {
+      "tipo": "String",
+      "descricao": "Código do tipo de unidade"
+    },
+    "DS_TIPO_UNIDADE": {
+      "tipo": "String",
+      "descricao": "Descrição do tipo de unidade",
+      "exemplos": ["Hospital Geral", "Hospital Especializado", "Pronto Socorro", "Clínica"]
+    },
+    "NATUREZA_JURIDICA": {
+      "tipo": "String",
+      "descricao": "Código da natureza jurídica"
+    },
+    "DESC_NATUREZA_JURIDICA": {
+      "tipo": "String",
+      "descricao": "Descrição da natureza jurídica",
+      "exemplos": ["Faculdade/Universidade", "Associação Comunitária", "Empresa Privada"]
+    },
+    "NO_LOGRADOURO": {
+      "tipo": "String",
+      "descricao": "Nome da rua/avenida do estabelecimento"
+    },
+    "NU_ENDERECO": {
+      "tipo": "String",
+      "descricao": "Número do endereço"
+    },
+    "NO_COMPLEMENTO": {
+      "tipo": "String",
+      "descricao": "Complemento do endereço (apt, sala, etc)"
+    },
+    "NO_BAIRRO": {
+      "tipo": "String",
+      "descricao": "Nome do bairro"
+    },
+    "CO_CEP": {
+      "tipo": "String",
+      "descricao": "Código de Endereçamento Postal (CEP)"
+    },
+    "NU_TELEFONE": {
+      "tipo": "String",
+      "descricao": "Número de telefone de contato"
+    },
+    "NO_EMAIL": {
+      "tipo": "String",
+      "descricao": "Endereço de e-mail de contato"
+    },
+    "LEITOS_EXISTENTES": {
+      "tipo": "Int32",
+      "descricao": "Quantidade total de leitos existentes no estabelecimento"
+    },
+    "LEITOS_SUS": {
+      "tipo": "Int32",
+      "descricao": "Quantidade de leitos disponíveis pelo SUS"
+    },
+    "UTI_TOTAL_EXIST": {
+      "tipo": "Int32",
+      "descricao": "Quantidade total de leitos de UTI existentes"
+    },
+    "UTI_TOTAL_SUS": {
+      "tipo": "Int32",
+      "descricao": "Quantidade de leitos de UTI disponíveis pelo SUS"
+    },
+    "UTI_ADULTO_EXIST": {
+      "tipo": "Int32",
+      "descricao": "Quantidade de leitos de UTI adulto existentes"
+    },
+    "UTI_ADULTO_SUS": {
+      "tipo": "Int32",
+      "descricao": "Quantidade de leitos de UTI adulto disponíveis pelo SUS"
+    },
+    "UTI_PEDIATRICO_EXIST": {
+      "tipo": "Int32",
+      "descricao": "Quantidade de leitos de UTI pediátrica existentes"
+    },
+    "UTI_PEDIATRICO_SUS": {
+      "tipo": "Int32",
+      "descricao": "Quantidade de leitos de UTI pediátrica disponíveis pelo SUS"
+    },
+    "UTI_NEONATAL_EXIST": {
+      "tipo": "Int32",
+      "descricao": "Quantidade de leitos de UTI neonatal existentes"
+    },
+    "UTI_NEONATAL_SUS": {
+      "tipo": "Int32",
+      "descricao": "Quantidade de leitos de UTI neonatal disponíveis pelo SUS"
+    },
+    "UTI_QUEIMADO_EXIST": {
+      "tipo": "Int32",
+      "descricao": "Quantidade de leitos de UTI queimados existentes"
+    },
+    "UTI_QUEIMADO_SUS": {
+      "tipo": "Int32",
+      "descricao": "Quantidade de leitos de UTI queimados disponíveis pelo SUS"
+    },
+    "UTI_CORONARIANA_EXIST": {
+      "tipo": "Int32",
+      "descricao": "Quantidade de leitos de UTI coronariana existentes"
+    },
+    "UTI_CORONARIANA_SUS": {
+      "tipo": "Int32",
+      "descricao": "Quantidade de leitos de UTI coronariana disponíveis pelo SUS"
+    }
+  },
+  "exemplos_queries": {
+    "total_leitos_por_estado": "SELECT UF, SUM(LEITOS_EXISTENTES) as total_leitos FROM leitos GROUP BY UF ORDER BY total_leitos DESC",
+    "leitos_sus_por_regiao": "SELECT REGIAO, SUM(LEITOS_SUS) as leitos_sus FROM leitos GROUP BY REGIAO",
+    "uti_disponivel_por_municipio": "SELECT MUNICIPIO, UF, SUM(UTI_TOTAL_SUS) as uti_sus FROM leitos GROUP BY MUNICIPIO, UF ORDER BY uti_sus DESC LIMIT 20",
+    "hospitais_com_uti_neonatal": "SELECT NOME_ESTABELECIMENTO, MUNICIPIO, UF, UTI_NEONATAL_EXIST FROM leitos WHERE UTI_NEONATAL_EXIST > 0",
+    "capacidade_uti_adulto_por_tipo_gestao": "SELECT TP_GESTAO, SUM(UTI_ADULTO_EXIST) as total_uti_adulto, SUM(UTI_ADULTO_SUS) as uti_adulto_sus FROM leitos GROUP BY TP_GESTAO",
+    "hospitais_por_municipio": "SELECT MUNICIPIO, COUNT(*) as qtd_estabelecimentos, SUM(LEITOS_EXISTENTES) as total_leitos FROM leitos GROUP BY MUNICIPIO ORDER BY total_leitos DESC",
+    "cobertura_sus_por_estado": "SELECT UF, SUM(LEITOS_EXISTENTES) as leitos_total, SUM(LEITOS_SUS) as leitos_sus, ROUND((SUM(LEITOS_SUS) / SUM(LEITOS_EXISTENTES)) * 100, 2) as percentual_sus FROM leitos GROUP BY UF",
+    "uti_queimado_distribuicao": "SELECT MUNICIPIO, UF, SUM(UTI_QUEIMADO_EXIST) as uti_queimado FROM leitos WHERE UTI_QUEIMADO_EXIST > 0 ORDER BY uti_queimado DESC"
+  },
+  "filtros_principais": [
+    "UF - para filtrar por estado",
+    "REGIAO - para filtrar por região",
+    "MUNICIPIO - para filtrar por município",
+    "TP_GESTAO - para filtrar por tipo de gestão (pública, privada, etc)",
+    "DS_TIPO_UNIDADE - para filtrar por tipo de estabelecimento",
+    "COMP - para filtrar por competência/período"
+  ],
+  "metricas_disponiveis": [
+    "LEITOS_EXISTENTES - total de leitos",
+    "LEITOS_SUS - leitos disponíveis pelo SUS",
+    "UTI_ADULTO_EXIST - UTI adulto existente",
+    "UTI_ADULTO_SUS - UTI adulto pelo SUS",
+    "UTI_PEDIATRICO_EXIST - UTI pediátrica existente",
+    "UTI_PEDIATRICO_SUS - UTI pediátrica pelo SUS",
+    "UTI_NEONATAL_EXIST - UTI neonatal existente",
+    "UTI_NEONATAL_SUS - UTI neonatal pelo SUS",
+    "UTI_CORONARIANA_EXIST - UTI coronariana existente",
+    "UTI_CORONARIANA_SUS - UTI coronariana pelo SUS",
+    "UTI_QUEIMADO_EXIST - UTI queimados existente",
+    "UTI_QUEIMADO_SUS - UTI queimados pelo SUS"
+  ],
+  "notas": [
+    "Use SUM() para agregar capacidade de leitos entre múltiplas linhas",
+    "Para filtros de texto (estado, município, tipo gestão), use = (não LIKE)",
+    "Sempre verifique a competência (COMP) para garantir que está analisando dados da mesma data",
+    "Use LIMIT para resultados grandes",
+    "Para calcular percentuais de cobertura SUS, divida LEITOS_SUS por LEITOS_EXISTENTES",
+    "As colunas de UTI específica devem ser somadas para obter o total de UTI (UTI_TOTAL_EXIST e UTI_TOTAL_SUS já contêm o total)"
+  ]
+}

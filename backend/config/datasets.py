@@ -10,13 +10,9 @@ DATASETS_CONFIG = {
         "table_name": "vacinacao",
         "description": "Vacinação COVID-19 no Brasil",
     },
-    "registro-de-ocupacao-hospitalar-covid-19": {
-        "table_name": "registro_de_ocupacao_hospitalar_covid_19",
-        "description": "Registro de ocupação hospitalar COVID-19",
-    },
-    "arboviroses-febre-de-chikungunya": {
-        "table_name": "arboviroses_febre_de_chikungunya",
-        "description": "Casos de febre de chikungunya no Brasil",
+    "leitos": {
+        "table_name": "leitos",
+        "description": "Dados de leitos em hospitais e estabelecimentos de saúde no Brasil",
     },
 }
 

@@ -40,3 +40,49 @@ ALTER TABLE vacinacao ADD INDEX idx_uf paciente_endereco_uf TYPE set(0);
 ALTER TABLE vacinacao ADD INDEX idx_municipio paciente_endereco_nmMunicipio TYPE set(0);
 ALTER TABLE vacinacao ADD INDEX idx_data vacina_dataAplicacao TYPE set(0);
 ALTER TABLE vacinacao ADD INDEX idx_vacina vacina_nome TYPE set(0);
+
+-- Criar tabela leitos com schema para dados de capacidade hospitalar
+CREATE TABLE IF NOT EXISTS leitos (
+    COMP String,
+    REGIAO String,
+    UF String,
+    CO_IBGE String,
+    MUNICIPIO String,
+    MOTIVO_DESABILITACAO Nullable(String),
+    CNES String,
+    NOME_ESTABELECIMENTO String,
+    RAZAO_SOCIAL Nullable(String),
+    TP_GESTAO Nullable(String),
+    CO_TIPO_UNIDADE Nullable(String),
+    DS_TIPO_UNIDADE Nullable(String),
+    NATUREZA_JURIDICA Nullable(String),
+    DESC_NATUREZA_JURIDICA Nullable(String),
+    NO_LOGRADOURO Nullable(String),
+    NU_ENDERECO Nullable(String),
+    NO_COMPLEMENTO Nullable(String),
+    NO_BAIRRO Nullable(String),
+    CO_CEP Nullable(String),
+    NU_TELEFONE Nullable(String),
+    NO_EMAIL Nullable(String),
+    LEITOS_EXISTENTES Int32,
+    LEITOS_SUS Int32,
+    UTI_TOTAL_EXIST Int32,
+    UTI_TOTAL_SUS Int32,
+    UTI_ADULTO_EXIST Int32,
+    UTI_ADULTO_SUS Int32,
+    UTI_PEDIATRICO_EXIST Int32,
+    UTI_PEDIATRICO_SUS Int32,
+    UTI_NEONATAL_EXIST Int32,
+    UTI_NEONATAL_SUS Int32,
+    UTI_QUEIMADO_EXIST Int32,
+    UTI_QUEIMADO_SUS Int32,
+    UTI_CORONARIANA_EXIST Int32,
+    UTI_CORONARIANA_SUS Int32
+) ENGINE = MergeTree()
+ORDER BY (UF, MUNICIPIO, CNES);
+
+-- Índices para queries comuns de leitos
+ALTER TABLE leitos ADD INDEX idx_uf UF TYPE set(0);
+ALTER TABLE leitos ADD INDEX idx_municipio MUNICIPIO TYPE set(0);
+ALTER TABLE leitos ADD INDEX idx_regiao REGIAO TYPE set(0);
+ALTER TABLE leitos ADD INDEX idx_cnes CNES TYPE set(0);
