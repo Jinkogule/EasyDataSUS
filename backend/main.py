@@ -86,7 +86,7 @@ def root():
         "quick_start": {
             "1_learn": "Veja a documentação em /docs",
             "2_get_questions": "GET /api/questions",
-            "3_ask_question": "POST /api/ask com {\"question\": \"...\", \"dataset\": \"vacinacao-covid\"}",
+            "3_ask_question": "POST /api/ask com {\"question\": \"...\", \"dataset\": \"covid-19-vacinacao\"}",
             "4_upload_data": "POST /api/admin/datasets/upload (requer arquivo CSV)"
         }
     }

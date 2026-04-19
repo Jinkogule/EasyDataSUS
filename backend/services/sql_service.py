@@ -57,13 +57,13 @@ def extract_sql(text: str) -> str:
     logger.warning(f"Não conseguiu extrair SQL válido de: {text[:100]}")
     return None
 
-def validate_sql_syntax(sql: str, dataset: str = "vacinacao-covid") -> bool:
+def validate_sql_syntax(sql: str, dataset: str = "covid-19-vacinacao") -> bool:
     """
     Valida sintaxe básica de SQL para um dataset específico.
     
     Args:
         sql: Query SQL a validar
-        dataset: Dataset esperado (padrão: "vacinacao-covid")
+        dataset: Dataset esperado (padrão: "covid-19-vacinacao")
     
     Returns:
         True se SQL é válido, False caso contrário
@@ -149,7 +149,7 @@ def _generate_examples_for_dataset(dataset: str, schema: dict) -> str:
         String com exemplos SQL formatados
     """
     examples_map = {
-        "vacinacao-covid": """
+        "covid-19-vacinacao": """
 EXEMPLO 1 - Genérico (sem filtro de vacina):
 Pergunta: Quantas doses foram aplicadas em SP?
 SELECT COUNT(*) FROM vacinacao WHERE paciente_endereco_uf = 'SP'
@@ -239,7 +239,7 @@ def _get_sql_rules_for_dataset(dataset: str, schema: dict) -> str:
         String com regras formatadas
     """
     rules_map = {
-        "vacinacao-covid": """
+        "covid-19-vacinacao": """
 REGRAS OBRIGATÓRIAS PARA VACINAÇÃO:
 1. Se pergunta tem "quantas" → use COUNT(*)
 2. Se pergunta menciona estado → use paciente_endereco_uf
@@ -281,7 +281,7 @@ REGRAS OBRIGATÓRIAS PARA INFLUENZA:
     return rules_map.get(dataset, "")
 
 
-def generate_sql(question, metadata, model_name, dataset: str = "vacinacao-covid"):
+def generate_sql(question, metadata, model_name, dataset: str = "covid-19-vacinacao"):
     """
     Gera SQL com few-shot learning e validação.
     
@@ -291,7 +291,7 @@ def generate_sql(question, metadata, model_name, dataset: str = "vacinacao-covid
         question: Pergunta em linguagem natural
         metadata: JSON string com metadados do dataset (inclui schema)
         model_name: Nome do modelo LLM
-        dataset: ID do dataset (padrão: "vacinacao-covid")
+        dataset: ID do dataset (padrão: "covid-19-vacinacao")
     
     Returns:
         Query SQL válida ou None se falhar
@@ -384,7 +384,7 @@ Responda apenas com a query SQL:"""
         logger.error(f"Erro ao gerar SQL: {e}")
         return fallback_sql(question, dataset)
 
-def fallback_sql(question: str, dataset: str = "vacinacao-covid") -> str:
+def fallback_sql(question: str, dataset: str = "covid-19-vacinacao") -> str:
     """
     Fallback robusto quando LLM falha.
     
@@ -392,7 +392,7 @@ def fallback_sql(question: str, dataset: str = "vacinacao-covid") -> str:
     
     Args:
         question: Pergunta do usuário
-        dataset: Dataset a usar (padrão: "vacinacao-covid")
+        dataset: Dataset a usar (padrão: "covid-19-vacinacao")
     
     Returns:
         Query SQL de fallback
@@ -410,7 +410,7 @@ def fallback_sql(question: str, dataset: str = "vacinacao-covid") -> str:
     
     # ========== COLUNA DE AGRUPAMENTO POR DATASET ==========
     groupby_columns = {
-        "vacinacao-covid": "paciente_endereco_uf",
+        "covid-19-vacinacao": "paciente_endereco_uf",
         "dengue-2024": "estado_uf",
         "influenza-2025": "estado_uf",
     }

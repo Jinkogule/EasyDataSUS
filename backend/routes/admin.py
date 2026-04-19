@@ -174,7 +174,7 @@ def validate_csv_schema(csv_content: str, dataset: str) -> SchemaValidationRespo
 
 @router.post("/admin/datasets/upload", response_model=UploadResponse)
 async def upload_dataset(
-    dataset: str = Query(..., description="ID do dataset (ex: vacinacao-covid)"),
+    dataset: str = Query(..., description="ID do dataset (ex: covid-19-vacinacao)"),
     file: UploadFile = File(..., description="Arquivo CSV a carregar"),
     skip_validation: bool = Query(False, description="Pular validação de schema")
 ):
@@ -186,7 +186,7 @@ async def upload_dataset(
     - Carrega dados no ClickHouse
     
     Exemplo:
-        curl -X POST "http://localhost:8000/api/admin/datasets/upload?dataset=vacinacao-covid" \\
+        curl -X POST "http://localhost:8000/api/admin/datasets/upload?dataset=covid-19-vacinacao" \\
              -F "file=@dataset.csv"
     """
     
