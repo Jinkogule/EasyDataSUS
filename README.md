@@ -2,7 +2,7 @@
 <h1>EasyDataSUS</h1>
 
 [![License](https://img.shields.io/github/license/Jinkogule/EasyDataSUS?style=for-the-badge)](LICENSE)
-![Status](https://img.shields.io/badge/STATUS-MVP%20|%20IN%20VALIDATION-brightgreen?style=for-the-badge)
+![Status](https://img.shields.io/badge/STATUS-IN%20|%20IN%20DEVELOPMENT-brightgreen?style=for-the-badge)
 </div>
 
 <p align="center">
@@ -167,6 +167,17 @@ Expected response:
       <br>
       <a href="https://github.com/Jinkogule">
         <img src="https://img.shields.io/badge/-Github-black?style=flat-square&logo=Github&logoColor=white">
+      </a>
+    </td>
+    <td align="center">
+      Flávio Seixas
+      <br>
+      <a href="http://lattes.cnpq.br/4319951805195534">
+        <img src="https://www.w3schools.com/w3images/avatar2.png" width="100px;" alt="Flávio Seixas"/>
+      </a>
+      <br>
+      <a href="http://lattes.cnpq.br/4319951805195534">
+        <img src="https://img.shields.io/badge/-Lattes-black?style=flat-square&logo=GoogleScholar&logoColor=white">
       </a>
     </td>
   </tr>
