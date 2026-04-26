@@ -18,41 +18,56 @@ def extract_sql(text: str) -> str:
     if not text:
         return None
     
-    # 1. Try markdown code block ```sql
-    match = re.search(r"```(?:sql)?\s*(SELECT\s+.+?)```", text, re.DOTALL | re.IGNORECASE)
-    if match:
-        sql = match.group(1).strip()
-        logger.debug(f"SQL extraído do bloco markdown: {sql[:50]}...")
-        return sql
+    # Limpar backticks e artefatos no final de tudo
+    text = text.rstrip().rstrip('`')
     
-    # 2. Extract SELECT ... LIMIT pattern (mais específico e robusto)
-    # Procura por SELECT ... até LIMIT ou fim
+    # 1. Try markdown code block ```sql
+    match = re.search(r"```(?:sql)?\s*(SELECT\s+.+?)(?:```|$)", text, re.DOTALL | re.IGNORECASE)
+    if match:
+        sql = match.group(1).strip().rstrip('`')
+        if sql and sql.upper().startswith("SELECT") and "FROM" in sql.upper():
+            logger.debug(f"SQL extraído do bloco markdown: {sql[:50]}...")
+            return sql
+    
+    # 2. Extract SELECT ... pattern (mais específico e robusto)
+    # Procura por SELECT ... até LIMIT, fim de linha, ou backtick
     match = re.search(
-        r"(SELECT\s+.+?(?:LIMIT\s+\d+)?)\s*(?:$|\n\n)",
+        r"(SELECT\s+.+?(?:LIMIT\s+\d+)?)\s*(?:```|\n\n|$)",
         text,
         re.DOTALL | re.IGNORECASE
     )
     if match:
-        sql = match.group(1).strip()
+        sql = match.group(1).strip().rstrip('`')
         # Validar que tem WHERE com comparação se necessário
         if "WHERE" in sql.upper():
             # Se tem WHERE, deve ter = ou IN ou LIKE
             if not any(op in sql.upper() for op in [" = ", " IN ", " LIKE ", " > ", " < "]):
                 logger.warning(f"SQL tem WHERE mas sem operador de comparação: {sql[:100]}")
                 return None
-        logger.debug(f"SQL extraído com regex SELECT...LIMIT: {sql[:50]}...")
-        return sql
+        if sql and sql.upper().startswith("SELECT") and "FROM" in sql.upper():
+            logger.debug(f"SQL extraído com regex SELECT...LIMIT: {sql[:50]}...")
+            return sql
     
-    # 3. Fallback simples: tudo que começa com SELECT até primeira quebra de linha dupla
+    # 3. Fallback simples: tudo que começa com SELECT até primeira quebra de linha dupla ou backtick
     if "SELECT" in text.upper():
         idx = text.upper().find("SELECT")
-        # Pegar desde SELECT até LIMIT ou fim de parágrafo
-        candidate = text[idx:].split("\n\n")[0].strip()
+        # Pegar desde SELECT até LIMIT, backtick, ou fim de parágrafo
+        raw = text[idx:]
+        # Remove backticks
+        raw = raw.rstrip('`')
+        # Pega até quebra dupla, backtick, ou fim
+        candidates = [
+            raw.split("\n\n")[0],  # Até quebra dupla
+            raw.split("```")[0],   # Até backtick
+            raw.split("\n```")[0], # Até backtick com newline
+        ]
         
-        # Validar mínima integridade
-        if candidate.upper().startswith("SELECT") and "FROM" in candidate.upper():
-            logger.debug(f"SQL extraído por fallback simples: {candidate[:50]}...")
-            return candidate
+        for candidate in candidates:
+            candidate = candidate.strip().rstrip('`')
+            # Validar mínima integridade
+            if candidate.upper().startswith("SELECT") and "FROM" in candidate.upper():
+                logger.debug(f"SQL extraído por fallback simples: {candidate[:50]}...")
+                return candidate
     
     logger.warning(f"Não conseguiu extrair SQL válido de: {text[:100]}")
     return None
@@ -169,6 +184,13 @@ SELECT COUNT(*) FROM vacinacao WHERE vacina_descricao_dose = '2ª dose'
 EXEMPLO 5 - Evolução temporal:
 Pergunta: Qual foi a evolução mensal de vacinação?
 SELECT toYYYYMM(vacina_dataAplicacao) as mes, COUNT(*) as total FROM vacinacao GROUP BY mes ORDER BY mes
+
+EXEMPLO 6 - Estatísticas numéricas:
+Pergunta: Qual é a idade média das pessoas vacinadas?
+SELECT AVG(paciente_idade) as idade_media FROM vacinacao
+
+Pergunta: Qual é a idade mínima e máxima?
+SELECT MIN(paciente_idade) as minima, MAX(paciente_idade) as maxima FROM vacinacao
         """,
         "dengue-2024": """
 EXEMPLO 1 - Total de casos:
@@ -248,10 +270,12 @@ REGRAS OBRIGATÓRIAS PARA VACINAÇÃO:
 5. NUNCA filtre por vacina se pergunta apenas menciona "vacina" genericamente
 6. Se pergunta menciona dose específica ('1ª dose', '2ª dose', 'reforço') → use vacina_descricao_dose
 7. Se pergunta menciona data/período → use vacina_dataAplicacao
-8. Não use DATE() ou datetime() - use toDate(), toYYYYMM()
-9. Respeite maiúsculas/minúsculas de estados ('SP', não 'sp')
-10. Não use LIKE com % - use = para exatidão
-11. Se resultado tiver muitas linhas, use LIMIT 100
+8. Se pergunta menciona "idade" (média, mínima, máxima) → use paciente_idade com AVG/MIN/MAX
+9. Se pergunta menciona "sexo" → use paciente_enumSexoBiologico com COUNT(*) GROUP BY
+10. Não use DATE() ou datetime() - use toDate(), toYYYYMM()
+11. Respeite maiúsculas/minúsculas de estados ('SP', não 'sp')
+12. Não use LIKE com % - use = para exatidão
+13. Se resultado tiver muitas linhas, use LIMIT 100
         """,
         "dengue-2024": """
 REGRAS OBRIGATÓRIAS PARA DENGUE:
@@ -335,6 +359,8 @@ PADRÕES IMPORTANTES:
 ✓ "Quantas..." → COUNT(*)
 ✓ "Por estado..." → GROUP BY estado
 ✓ "Quantas em SP..." → COUNT(*) WHERE estado = 'SP'
+✓ "Qual é a idade média..." → AVG(paciente_idade)
+✓ "Qual é a idade mínima..." → MIN(paciente_idade)
 
 DATASET: {dataset}
 Tabela: {table_name}
@@ -346,6 +372,12 @@ Colunas disponíveis:
 
 FUNÇÕES CLICKHOUSE NECESSÁRIAS:
 - COUNT(*) - contar linhas
+- AVG(coluna) - calcular média numérica
+- MIN(coluna) - valor mínimo
+- MAX(coluna) - valor máximo
+- STDDEV(coluna) - desvio padrão
+- MEDIAN(coluna) - mediana
+- SUM(coluna) - somar valores
 - GROUP BY - agrupar
 - WHERE - filtrar
 - ORDER BY DESC - ordenar descendente (para ranking)
@@ -408,7 +440,31 @@ def fallback_sql(question: str, dataset: str = "covid-19-vacinacao") -> str:
     
     q = question.lower()
     
-    # ========== COLUNA DE AGRUPAMENTO POR DATASET ==========
+    # ========== MAPEAMENTO DE COLUNAS POR DATASET ==========
+    column_mappings = {
+        "covid-19-vacinacao": {
+            "fabricante": "vacina_nome",
+            "vacina": "vacina_nome",
+            "marca": "vacina_nome",
+            "estado": "paciente_endereco_uf",
+            "municipio": "paciente_endereco_nmMunicipio",
+            "sexo": "paciente_enumSexoBiologico",
+            "idade": "paciente_nrIdade",
+            "dose": "vacina_descricao_dose",
+            "mes": "vacina_dataAplicacao",
+            "mês": "vacina_dataAplicacao",
+            "meses": "vacina_dataAplicacao",
+            "month": "vacina_dataAplicacao",
+            "ano": "vacina_dataAplicacao",
+            "anos": "vacina_dataAplicacao",
+            "year": "vacina_dataAplicacao",
+            "semana": "vacina_dataAplicacao",
+            "semanas": "vacina_dataAplicacao",
+            "week": "vacina_dataAplicacao",
+        },
+    }
+    
+    current_mappings = column_mappings.get(dataset, {})
     groupby_columns = {
         "covid-19-vacinacao": "paciente_endereco_uf",
         "dengue-2024": "estado_uf",
@@ -416,14 +472,117 @@ def fallback_sql(question: str, dataset: str = "covid-19-vacinacao") -> str:
     }
     groupby_col = groupby_columns.get(dataset, "estado")
     
+    # ========== DETECTAR SE PERGUNTA BUSCA MENOR ("menor", "mínimo") vs MAIOR ==========
+    is_asking_for_min = any(word in q for word in ["menor", "mínimo", "minima", "lowest", "least"])
+    is_asking_for_max = any(word in q for word in ["maior", "máximo", "maxima", "highest", "most"])
+    
+    # Define o ORDER BY apropriado
+    order_by_clause = "ORDER BY total" if is_asking_for_min else "ORDER BY total DESC"
+    
+    # ========== DETECTAR PADRÃO: "de cada X" ou "por cada X" → GROUP BY ==========
+    patterns_groupby = [
+        ("de cada", True),
+        ("por cada", True),
+        ("de cada", True),
+        ("por ", True),
+        ("cada ", True),
+    ]
+    
+    for pattern, is_groupby in patterns_groupby:
+        if pattern in q:
+            # Tentar extrair coluna após "de cada X" ou "por X"
+            # Exemplo: "doses de cada fabricante" → fabricante
+            import re
+            # Procura por "de cada PALAVRA" ou "por PALAVRA"
+            regex_patterns = [
+                r'de cada (\w+)',
+                r'por (\w+)',
+                r'cada (\w+)',
+                r'por cada (\w+)',
+            ]
+            
+            for regex in regex_patterns:
+                match = re.search(regex, q)
+                if match:
+                    word = match.group(1).lower()
+                    # Mapear palavra para coluna conhecida
+                    if word in current_mappings:
+                        col_name = current_mappings[word]
+                        logger.debug(f"Padrão 'de cada/por {word}' detectado → GROUP BY {col_name}")
+                        sql = f"SELECT {col_name}, COUNT(*) as total FROM {table_name} GROUP BY {col_name} {order_by_clause} LIMIT 100"
+                        return sql
+                    # Tentar match próximo
+                    for key in current_mappings.keys():
+                        if key.startswith(word) or word.startswith(key):
+                            col_name = current_mappings[key]
+                            logger.debug(f"Padrão 'de cada/por {word}' (partial match {key}) → GROUP BY {col_name}")
+                            sql = f"SELECT {col_name}, COUNT(*) as total FROM {table_name} GROUP BY {col_name} {order_by_clause} LIMIT 100"
+                            return sql
+    
+    # ========== DETECTAR PADRÃO: Períodos Temporais (anos, meses, semanas) ==========
+    # MUST BE BEFORE STATISTICS to avoid "maior/menor" triggering MAX/MIN
+    # Perguntas como: "Qual ano teve mais doses?", "Qual mês teve mais casos?", "em quais meses?"
+    if any(word in q for word in ["ano", "anos", "mês", "meses", "mês", "mes", "semana", "semanas", "trimestre", "trimestres"]):
+        # Detectar qual período extrair (ano, mês, semana, etc)
+        period_functions = {
+            "ano": ("year", "ano"),
+            "anos": ("year", "ano"),
+            "mês": ("month", "mes"),
+            "mes": ("month", "mes"),
+            "month": ("month", "mes"),
+            "semana": ("week", "semana"),
+            "semanas": ("week", "semana"),
+            "trimestre": ("quarter", "trimestre"),
+            "trimestres": ("quarter", "trimestre"),
+        }
+        
+        # Encontrar qual período está na pergunta
+        for period_word, (func_name, alias) in period_functions.items():
+            if period_word in q:
+                # Encontrar coluna de data apropriada para o dataset
+                date_columns = {
+                    "covid-19-vacinacao": "vacina_dataAplicacao",
+                    "dengue-2024": "data_caso",
+                    "influenza-2025": "data_vacinacao",
+                }
+                date_col = date_columns.get(dataset, "data")
+                
+                logger.debug(f"Padrão detectado: Período '{period_word}' de {date_col} → {func_name}()")
+                sql = f"SELECT {func_name}({date_col}) as {alias}, COUNT(*) as total FROM {table_name} GROUP BY {alias} {order_by_clause} LIMIT 100"
+                return sql
+    
+    # ========== DETECTAR PADRÃO: Estatísticas de coluna ==========
+    # Perguntas como: "Qual é a idade média?", "Qual é a idade mínima?", etc
+    stats_patterns = {
+        "média": ("AVG", ["média", "media", "average", "médio"]),
+        "mínima": ("MIN", ["mínima", "minima", "mínimo", "minimo", "menor"]),
+        "máxima": ("MAX", ["máxima", "maxima", "máximo", "maximo", "maior"]),
+        "mediana": ("MEDIAN", ["mediana", "median"]),
+        "desvio": ("STDDEV", ["desvio", "desvio padrão", "desvpack", "variância"]),
+    }
+    
+    for stat_type, (sql_func, keywords) in stats_patterns.items():
+        if any(kw in q for kw in keywords):
+            # Procurar qual coluna (idade, altura, etc)
+            for key in current_mappings.keys():
+                if key in q:
+                    col_name = current_mappings[key]
+                    logger.debug(f"Padrão detectado: '{stat_type}' de {key} → {sql_func}({col_name})")
+                    sql = f"SELECT {sql_func}({col_name}) as resultado FROM {table_name}"
+                    return sql
+            # Se não achou coluna específica, tentar idade como default
+            logger.debug(f"Padrão detectado: '{stat_type}' com default idade")
+            sql = f"SELECT {sql_func}(paciente_idade) as resultado FROM {table_name}"
+            return sql
+    
     # ========== DETECTAR PADRÃO: "Qual ... teve MAIS" → GROUP BY DESC ==========
     if any(word in q for word in ["qual", "que"]) and any(word in q for word in ["mais", "maior", "maiores"]):
         # Pergunta de comparação: "Qual estado teve mais casos?"
         logger.debug("Padrão detectado: 'Qual ... teve MAIS' → GROUP BY")
-        sql = f"SELECT {groupby_col}, COUNT(*) as total FROM {table_name} GROUP BY {groupby_col} ORDER BY total DESC LIMIT 100"
+        sql = f"SELECT {groupby_col}, COUNT(*) as total FROM {table_name} GROUP BY {groupby_col} {order_by_clause} LIMIT 100"
     
     # ========== DETECTAR PADRÃO: "Quantas em estado específico" → WHERE ==========
-    elif any(word in q for word in ["quantas", "quantos", "quanto"]) and any(word in q for word in ["em", "em sp", "em rj", "no", "na"]):
+    elif any(word in q for word in ["quantas", "quantos", "quanto"]) and any(word in q for word in ["em ", "em sp", "em rj", "no ", "na "]):
         # Pergunta com filtro: "Quantas vacinas em SP?"
         logger.debug("Padrão detectado: 'Quantas em [estado]' → WHERE")
         sql = f"SELECT COUNT(*) as total FROM {table_name} LIMIT 10000"
@@ -436,7 +595,7 @@ def fallback_sql(question: str, dataset: str = "covid-19-vacinacao") -> str:
     # ========== DETECTAR PADRÃO: "Por estado/região" → GROUP BY ==========
     elif any(word in q for word in ["por estado", "por uf", "cada estado", "por região", "região"]):
         logger.debug("Padrão detectado: 'Por estado' → GROUP BY")
-        sql = f"SELECT {groupby_col}, COUNT(*) as total FROM {table_name} GROUP BY {groupby_col} ORDER BY total DESC LIMIT 100"
+        sql = f"SELECT {groupby_col}, COUNT(*) as total FROM {table_name} GROUP BY {groupby_col} {order_by_clause} LIMIT 100"
     
     # ========== DEFAULT: COUNT simples ==========
     else:
