@@ -4,6 +4,7 @@ import re
 from datetime import datetime, date
 from metadata.loader import load_metadata
 from llm.router import get_llm
+from config.datasets import get_dataset_config
 
 logger = logging.getLogger(__name__)
 
@@ -16,323 +17,111 @@ class DateTimeEncoder(json.JSONEncoder):
         return super().default(obj)
 
 
-def _detect_distribution_keywords(question):
+def _get_dataset_context(dataset: str) -> str:
     """
-    Detecta palavras-chave que indicam um tipo específico de distribuição.
-    Retorna dicionário com contexto sobre a pergunta.
-    """
-    question_lower = question.lower()
+    Retorna contexto semântico sobre o dataset.
     
-    keywords = {
-        "sexo": ["sexo", "gênero", "feminino", "masculino", "biológico"],
-        "faixa_etaria": ["faixa etária", "idade", "faixa de idade", "grupo etário"],
-        "estado": ["estado", "estados", "por estado", "cada estado", "SP", "RJ", "MG", "BA"],
-        "municipio": ["município", "cidade", "municipios"],
-        "fabricante": ["fabricante", "vacina", "marca"],
-        "mes": ["mês", "meses", "mensal", "temporal", "evolução"],
-        "dose": ["dose", "doses", "tipo de dose", "esquema"],
-    }
-    
-    detected = {}
-    for category, keywords_list in keywords.items():
-        for kw in keywords_list:
-            if kw in question_lower:
-                detected[category] = True
-                break
-    
-    return detected
-
-
-def _detect_result_type(result, question=""):
-    """
-    Detecta o tipo de resultado da query de forma mais inteligente.
+    Args:
+        dataset: Nome do dataset (ex: "covid-19-vacinacao", "leitos")
     
     Returns:
-        "simple": Um valor numérico simples (COUNT)
-        "distribution": Distribuição com poucas categorias (sexo, faixas etárias, etc)
-        "ranking": Ranking de múltiplas entidades (estados, cidades, etc)
-        "multiple": Múltiplas colunas de dados
-        "temporal": Série temporal com datas/meses
+        String descrevendo o dataset e seus campos principais
     """
-    if not isinstance(result, list) or len(result) == 0:
-        return "empty"
-    
-    first_row = result[0]
-    
-    # Um valor: COUNT(*)
-    if len(result) == 1 and len(first_row) == 1:
-        return "simple"
-    
-    # Duas colunas com valores
-    if len(first_row) == 2 and isinstance(first_row[0], str):
-        num_rows = len(result)
+    try:
+        config = get_dataset_config(dataset)
+        description = config.get("description", "")
         
-        # Se temos 2-4 categorias, é provavelmente uma distribuição
-        if 2 <= num_rows <= 4:
-            # Check se parecem ser categorias pequenas (F/M, Sim/Não, etc)
-            categories = [row[0] for row in result]
-            avg_len = sum(len(str(c)) for c in categories) / len(categories)
-            if avg_len < 30:  # Nomes curtos indicam categorias, não cidades
-                logger.debug(f"Detectado como distribuição: {num_rows} categorias com avg len={avg_len:.1f}")
-                return "distribution"
-        
-        # Se contém padrões de data/mês, é série temporal
-        # NOTA: Não usar [A-Z][a-z]{2} pois match com siglas de estado (AC, SP, etc)
-        if any(re.match(r'\d{4}-\d{2}-\d{2}|\d{4}/\d{2}|\d{2}/\d{2}/\d{4}', str(row[0])) for row in result):
-            logger.debug("Detectado como série temporal pelos padrões de data")
-            return "temporal"
-        
-        # Se contém "2022", "2023", "2024", "2025" → série temporal
-        if any(re.search(r'\d{4}', str(row[0])) for row in result[:5]):
-            # Mas se todas as linhas têm 2 caracteres, é código de estado (UF), não data
-            if all(len(str(row[0])) <= 3 for row in result[:5]):
-                logger.debug(f"Detectado como ranking (códigos curtos tipo UF/estado)")
-                return "ranking"
-            logger.debug("Detectado como série temporal (contém anos)")
-            return "temporal"
-        
-        # Caso contrário, é ranking
-        logger.debug(f"Detectado como ranking: {num_rows} entidades")
-        return "ranking"
-    
-    # Múltiplas colunas: provavelmente temporal ou múltiplo
-    if len(first_row) > 2:
-        # Se terceira coluna tem datas/períodos, é temporal
-        if len(result) > 5:
-            return "temporal"
-        return "multiple"
-    
-    # Múltiplas colunas padrão
-    return "multiple"
-
-
-def _calculate_percentages(result):
-    """Calcula percentuais para cada linha no resultado"""
-    total = sum(row[1] for row in result if isinstance(row[1], (int, float)))
-    if total == 0:
-        return result
-    
-    return [(row[0], row[1], round(100 * row[1] / total, 1)) for row in result]
-
-
-def _format_prompt_for_type(question, result, result_type):
-    """
-    Gera prompt específico para cada tipo de resultado com contexto apropriado.
-    """
-    
-    if result_type == "simple":
-        # Um número simples
-        value = result[0][0]
-        return f"""Você é um assistente de dados em saúde pública.
-Responda em português claro e acessível.
-
-PERGUNTA: {question}
-RESULTADO: {value}
-
-INSTRUÇÕES:
-- Responda com UMA frase simples
-- Use EXATAMENTE o número {value}
-- Não invente contexto ou interpretações
-- Seja direto e factual
-
-RESPOSTA:"""
-    
-    elif result_type == "distribution":
-        # Distribuição de categorias: [["F", 206600], ["M", 180115], ...]
-        result_pct = _calculate_percentages(result)
-        formatted_lines = []
-        for item in result_pct:
-            label, count, pct = item[0], item[1], item[2] if len(item) > 2 else 0
-            formatted_lines.append(f"- {label}: {count:,} ({pct}%)")
-        
-        formatted = "\n".join(formatted_lines)
-        total = sum(row[1] for row in result)
-        
-        return f"""Você é um assistente de dados em saúde pública.
-
-PERGUNTA: {question}
-
-RESULTADO (DISTRIBUIÇÃO entre {len(result)} categorias):
-{formatted}
-TOTAL: {total:,}
-
-INSTRUÇÕES CRÍTICAS PARA DISTRIBUIÇÃO:
-1. Mencione TODAS as categorias encontradas, não apenas uma
-2. Inclua os números E os percentuais
-3. Escolha prontamente entre feminino/masculino se for "sexo"
-4. Use "Feminino" e "Masculino" para valores de sexo, não "F" e "M"
-5. Dê uma interpretação clara da proporção
-
-EXEMPLOS CORRETOS para distribuição:
-- Se resultado: Sexo F: 210133, Sexo M: 180115
-  Resposta: "A distribuição de vacinações foi: Feminino 210.133 (53,8%) e Masculino 180.115 (46,2%), indicando participação equilibrada de ambos os gêneros."
-
-- Se resultado: Faixa etária 18-30: 5000, 30-60: 8000, 60+: 2000
-  Resposta: "A maior parte foi adultos de 30-60 anos (57%), seguida de 18-30 anos (36%) e 60+ anos (14%)."
-
-RESPOSTA (incluindo TODAS as categorias com números e %):"""
-    
-    elif result_type == "temporal":
-        # Série temporal: [["2022-01", 1000], ["2022-02", 1500], ...]
-        formatted_lines = []
-        for row in result:
-            formatted_lines.append(f"- {row[0]}: {row[1]:,} registros")
-        
-        formatted = "\n".join(formatted_lines[:10])  # Top 10
-        max_value = max(row[1] for row in result)
-        min_value = min(row[1] for row in result)
-        max_entry = [row for row in result if row[1] == max_value][0]
-        min_entry = [row for row in result if row[1] == min_value][0]
-        
-        # Detectar se a pregunta busca mínimo ou máximo
-        is_asking_for_min = any(word in question.lower() for word in ["menor", "mínimo", "minima", "smallest", "least"])
-        
-        if is_asking_for_min:
-            return f"""Você é um assistente de dados em saúde pública.
-
-PERGUNTA: {question}
-
-RESULTADO (SÉRIE TEMPORAL - {len(result)} períodos):
-{formatted}
-
-VALOR MÍNIMO: {min_entry[0]} com {min_value:,} registros
-VALOR MÁXIMO: {max_entry[0]} com {max_value:,} registros
-
-INSTRUÇÕES:
-1. A pergunta pede o MENOR/MÍNIMO
-2. Responda focando em {min_entry[0]}: {min_value:,} registros
-3. Você pode mencionar também o máximo para contraste
-4. Comente sobre a disparidade
-
-RESPOSTA (mencionando o MÍNIMO {min_entry[0]}):"""  
-        else:
-            return f"""Você é um assistente de dados em saúde pública.
-
-PERGUNTA: {question}
-
-RESULTADO (SÉRIE TEMPORAL - {len(result)} períodos):
-{formatted}
-
-PICO: {max_entry[0]} com {max_value:,} registros
-
-INSTRUÇÕES PARA SÉRIE TEMPORAL:
-1. Identifique o período de pico/máximo
-2. Comente sobre a tendência geral (subida, queda, estável)
-3. Use nomes de meses quando aplicável (janeiro, fevereiro, etc)
-4. Destaque padrões importantes
-
-EXEMPLO CORRETO:
-- Resposta: "A vacinação atingiu pico em março de 2022 com 52.400 doses, iniciando com aumento progressivo de novembro e desacelerando após."
-
-RESPOSTA (incluindo pico e tendência):""" 
-    
-    elif result_type == "ranking":
-        # Ranking: [["SP", 156000], ["BA", 89500], ...]
-        # Detectar se a pergunta pede MÍNIMO ou MÁXIMO
-        is_asking_for_min = any(word in question.lower() for word in ["menor", "mínimo", "minima", "lowest", "least", "menos"])
-        is_asking_for_max = any(word in question.lower() for word in ["maior", "máximo", "maxima", "highest", "most", "mais"])
-        
-        if is_asking_for_min:
-            # Mostrar do menor para maior
-            bottom_5 = result[:5]
-            formatted = "\n".join([f"{rank+1}º - {row[0]}: {row[1]:,}" for rank, row in enumerate(bottom_5)])
-            first_place = result[0][0]
-            first_value = result[0][1]
-            last_place = result[-1][0]
-            last_value = result[-1][1]
-            
-            return f"""Você é um assistente de dados em saúde pública.
-
-PERGUNTA: {question}
-
-RESULTADO (RANKING ASCENDENTE - {len(result)} entidades, do MENOR para MAIOR):
-{formatted}
-
-MENOR: {first_place} com {first_value:,}
-MAIOR: {last_place} com {last_value:,}
-DISPARIDADE: {last_value:,} / {first_value:,} = {last_value/first_value:.0f}x
-
-INSTRUÇÕES (pergunta pede MENOR):
-1. Mencione claramente o MENOR: {first_place} com {first_value:,}
-2. Contraste com o maior para mostrar disparidade: {last_place} com {last_value:,}
-3. Use contexto geográfico apropriado
-4. Comente sobre a disparidade de cobertura
-
-EXEMPLO: "O estado com MENOR cobertura é AC com apenas 548 vacinações, enquanto SP lidera com 156.000 (285x mais)."
-
-RESPOSTA (mencionando o MENOR {first_place}):""" 
-        else:
-            # Mostrar do maior para menor (padrão)
-            top_5 = result[-5:] if is_asking_for_max else result[:5]  # Inversão se DESC
-            formatted = "\n".join([f"{rank+1}º - {row[0]}: {row[1]:,}" for rank, row in enumerate(top_5)])
-            
-            first_place = result[0][0]
-            first_value = result[0][1]
-            last_place = result[-1][0]  
-            last_value = result[-1][1]
-            
-            return f"""Você é um assistente de dados em saúde pública.
-
-PERGUNTA: {question}
-
-RESULTADO (TOP {min(5, len(result))} de {len(result)} entidades):
-{formatted}
-
-INSTRUÇÕES PARA RANKING:
-1. Mencione o 1º lugar e seu valor
-2. Comente sobre disparidades (se houver grandes diferenças)
-3. Se relevante, mencione o último lugar
-4. Use contexto geográfico/institucional apropriado
-
-EXEMPLOS CORRETOS:
-- Para ranking de estados: "São Paulo lidera com 156.000 vacinações, representando 40% do total, enquanto Acre tem apenas 548."
-- Para ranking de cidades: "A capital concentra 63% das vacinações."
-
-RESPOSTA (incluindo 1º lugar e contexto da disparidade):""" 
-    
-    elif result_type == "multiple":
-        # Múltiplos dados - lidar com datas
+        # Carregar metadata para mais contexto
         try:
-            formatted_result = json.dumps(result[:5], ensure_ascii=False, indent=2, cls=DateTimeEncoder)
-        except Exception as e:
-            logger.warning(f"Erro ao serializar resultado múltiplo: {e}. Usando versão simplificada")
-            # Fallback: converter tudo para string
-            formatted_result = str(result[:5])
-        
-        return f"""Você é um assistente de dados em saúde pública.
-
-PERGUNTA: {question}
-
-RESULTADO (primeiros 5 registros):
-{formatted_result}
-
-INSTRUÇÕES:
-- Responda com UMA frase simples em português
-- Use apenas os dados fornecidos
-- Não invente contextos
-- Seja factual e breve
-
-RESPOSTA:"""
-    
-    else:
-        # Fallback
-        try:
-            formatted = json.dumps(result[:3], ensure_ascii=False, cls=DateTimeEncoder)
+            metadata = load_metadata(dataset)
+            if metadata and "descricao" in metadata:
+                description = metadata["descricao"]
         except:
-            formatted = str(result[:3])
+            pass
         
-        return f"""Responda em UMA frase simples em português sobre:
-{question}
+        # Contexto específico por dataset
+        if "covid" in dataset.lower() or "vacinacao" in dataset.lower():
+            return f"""CONTEXTO DO DATASET: {description}
 
-Dados: {formatted}
+IMPORTANTE:
+- Os resultados se referem a DOSES DE VACINA aplicadas (não pessoas)
+- Colunas importantes: paciente_endereco_uf (estado), paciente_enumSexoBiologico (F/M), 
+  vacina_dataAplicacao (data), vacina_nome (marca), vacina_descricao_dose (1ª, 2ª, reforço)
+- Use "Feminino" e "Masculino" ao invés de F/M
+- Datas podem estar em formato YYYY-MM-DD"""
+        
+        elif "leito" in dataset.lower():
+            return f"""CONTEXTO DO DATASET: {description}
 
-RESPOSTA:"""
-
-
-def interpret_result(question, result, model_name):
-    """Interpreta resultado da query usando LLM com contexto inteligente"""
+IMPORTANTE:
+- Os resultados se referem a LEITOS HOSPITALARES (camas)
+- Colunas importantes: LEITOS_EXISTENTES (total de leitos), LEITOS_SUS (leitos públicos),
+  UTI_TOTAL_EXIST, UTI_ADULTO_EXIST, UTI_PEDIATRICO_EXIST, UTI_NEONATAL_EXIST, etc
+- Diferencie entre TOTAL e SUS (público)
+- Dados de capacidade hospitalar/infraestrutura, não de pacientes"""
+        
+        else:
+            return f"CONTEXTO: {description}"
     
-    logger.info(f"Interpretando resultado para: {question}")
+    except Exception as e:
+        logger.warning(f"Erro ao obter contexto do dataset {dataset}: {e}")
+        return "Contexto não disponível"
+
+
+def _format_result_for_llm(result: list, max_rows: int = 50) -> str:
+    """
+    Formata resultado para apresentação ao LLM.
+    
+    Args:
+        result: Lista de tuplas/listas do banco de dados
+        max_rows: Máximo de linhas a mostrar
+    
+    Returns:
+        String formatada do resultado
+    """
+    if not result:
+        return "[]"
+    
+    # Se há muitos resultados, mostrar amostra
+    if len(result) > max_rows:
+        display_result = result[:max_rows]
+        more_msg = f"\n... ({len(result) - max_rows} mais linhas)"
+    else:
+        display_result = result
+        more_msg = ""
+    
+    try:
+        formatted = json.dumps(
+            display_result, 
+            ensure_ascii=False, 
+            default=str,
+            indent=2
+        )
+    except Exception as e:
+        logger.warning(f"Erro ao serializar resultado: {e}. Usando versão simplificada")
+        formatted = str(display_result[:max_rows])
+    
+    return formatted + more_msg
+
+
+def interpret_result(question: str, result, model_name: str = "deepseek-local", dataset: str = "covid-19-vacinacao") -> str:
+    """
+    Interpreta resultado usando LLM com abordagem simplista e flexível.
+    
+    Não tenta detectar tipo de resultado - apenas passa pergunta + dados + contexto
+    para o LLM interpretar naturalmente.
+    
+    Args:
+        question: Pergunta original do usuário
+        result: Lista de resultados do SQL (pode ser vazia, um número, ranking, múltiplas colunas, etc)
+        model_name: Qual LLM usar
+        dataset: Qual dataset (para contexto)
+    
+    Returns:
+        String com interpretação em linguagem natural
+    """
+    
+    logger.info(f"Interpretando resultado para: {question[:80]}...")
     
     # Bloqueio crítico: checar se é erro
     if isinstance(result, dict) and "error" in result:
@@ -343,105 +132,125 @@ def interpret_result(question, result, model_name):
     # Checar se está vazio
     if not result or (isinstance(result, list) and len(result) == 0):
         logger.warning("Resultado da query vazio")
-        return "Não encontrei registros que correspondam à sua pergunta."
+        return "Não encontrei registros que correspondam à sua pergunta. Tente reformular a pergunta ou verifique os filtros."
     
     try:
         llm = get_llm(model_name)
         
-        # Detectar tipo de resultado PASSANDO A PERGUNTA para contexto melhor
-        result_type = _detect_result_type(result, question)
-        logger.info(f"Tipo de resultado detectado: {result_type}")
+        # Obter contexto do dataset
+        dataset_context = _get_dataset_context(dataset)
         
-        # Gerar prompt apropriado
-        prompt = _format_prompt_for_type(question, result, result_type)
-
-        logger.debug(f"Enviando para LLM modelo={model_name} com tipo={result_type}")
-        insight = llm.generate(prompt)
-        logger.debug(f"Resposta bruta do LLM: len={len(insight) if insight else 0}")
+        # Formatar resultado para apresentar ao LLM
+        formatted_result = _format_result_for_llm(result, max_rows=100)
         
-        # Sanitizar resposta - remover artefatos do modelo
-        insight = insight.strip() if insight else ""
+        # Gerar prompt simples que deixa LLM interpretar
+        prompt = _build_interpretation_prompt(
+            question=question,
+            result_data=formatted_result,
+            result_count=len(result),
+            dataset_context=dataset_context
+        )
         
-        # Remover blocos jupyter
-        if '<jupyter' in insight:
-            insight = insight.split('<jupyter')[0]
-        if '<gpt' in insight.lower():
-            insight = insight.lower().split('<gpt')[0] if '<gpt' in insight.lower() else insight
+        logger.debug(f"Enviando para LLM {model_name} com {len(result)} linhas de resultado")
         
-        # Remover code blocks
-        insight = insight.replace('```python', '').replace("```", '')
-        insight = insight.replace('"""', '').replace("'''", '')
-        insight = insight.replace('`', '').strip()
+        # Obter resposta do LLM
+        response = llm.generate(prompt)
         
-        # Remover padrões indesejados (USER INPUT, GPT Response, etc)
-        lines = insight.split('\n')
-        cleaned_lines = []
-        for line in lines:
-            upper_line = line.upper()
-            # Skip linhas com padrões indesejados
-            if any(pattern in upper_line for pattern in [
-                'USER INPUT', 'GPT', 'RESPONSE IN', 'JUPYTER',
-                'QUESTION:', 'ANSWER:', 'ASSISTANT:', 'PLEASE PROVIDE',
-                'I AM A VIRTUAL', 'I AM SORRY', 'INSTRUÇÕES', 'REGRA'
-            ]):
-                continue
-            if line.strip():
-                cleaned_lines.append(line.strip())
+        if not response or not response.strip():
+            logger.warning("Resposta vazia do LLM, usando fallback")
+            return _fallback_interpretation(result, question)
         
-        insight = '\n'.join(cleaned_lines)
-        insight = insight.strip('"').strip("'").strip()
+        interpretation = response.strip()
+        logger.info(f"Interpretação gerada com sucesso: {len(interpretation)} caracteres")
         
-        # Validar resultado
-        if not insight or insight in ["", "None", "null", "...", "Resultado:", "Resposta:"]:
-            logger.warning(f"LLM retornou inútil, usando fallback para tipo: {result_type}")
-            insight = _generate_fallback_response(result, result_type, question)
-        
-        logger.info(f"Interpretação gerada com sucesso (tipo={result_type}, len={len(insight)})")
-        return insight
+        return interpretation
     
     except Exception as e:
         error_str = str(e)
         logger.error(f"Erro ao interpretar resultado: {e}")
         
-        # Retornar resultado cru se LLM falhar
-        return _generate_fallback_response(result, _detect_result_type(result, question), question)
+        # Retornar fallback quando LLM falha
+        return _fallback_interpretation(result, question)
 
 
-def _generate_fallback_response(result, result_type, question=""):
-    """Gera resposta fallback quando LLM falha ou retorna nada útil"""
+def _build_interpretation_prompt(question: str, result_data: str, result_count: int, dataset_context: str) -> str:
+    """
+    Constrói prompt simples e flexível para o LLM interpretar resultado.
+    Zero hardcoding - deixa o LLM decidir como interpretar.
     
-    # Detectar se pergunta busca menor ou máximo
-    is_asking_for_min = any(word in question.lower() for word in ["menor", "mínimo", "minima", "lowest", "least"])
+    Args:
+        question: Pergunta do usuário
+        result_data: Dados formatados para exibição
+        result_count: Total de linhas no resultado
+        dataset_context: Contexto sobre o dataset
     
-    if result_type == "simple":
-        return f"Resultado: {result[0][0]}"
+    Returns:
+        Prompt estruturado para o LLM
+    """
     
-    elif result_type == "distribution":
-        total = sum(row[1] for row in result)
-        lines = []
-        for row in result:
-            pct = round(100 * row[1] / total, 1) if total > 0 else 0
-            lines.append(f"{row[0]}: {row[1]:,} ({pct}%)")
-        return "Distribuição encontrada: " + "; ".join(lines)
+    return f"""Você é um assistente de análise de dados de saúde pública no Brasil.
+Sua tarefa é interpretar e explicar resultados de consultas de forma clara e prática para gestor.
+
+{dataset_context}
+
+PERGUNTA DO GESTOR:
+{question}
+
+RESULTADO DA CONSULTA ({result_count} linha(s)):
+{result_data}
+
+INSTRUÇÕES OBRIGATÓRIAS:
+1. Responda em português claro e acessível
+2. Use os números EXATOS do resultado (não arredonde arbitrariamente)
+3. Traduza códigos (F→Feminino, M→Masculino, etc) quando apropriado
+4. Se há múltiplas linhas, interprete a distribuição/ranking/tendência
+5. Se há um número único, use como resposta principal
+6. PROIBIDO: inventar dados, datas, contextos não fornecidos, efeitos adversos
+7. PROIBIDO: fazer comparações com períodos que não estão nos dados
+8. Se a pergunta pede maior/menor/ranking, identifique claramente quem está em primeiro
+9. Máximo 3-4 frases, seja conciso
+
+CONTEXTO ADICIONAL:
+- Se há muitas linhas (>10), destaque os principais padrões
+- Se há proporções (razões, percentuais), calcule e mencione
+- Se há séries temporais, descreva a tendência (crescimento, queda, estável)
+- Se há categorizações (sexo, tipo, estado), mencione a distribuição
+
+Responda apenas com a interpretação, sem formatação especial, sem JSON, sem explicações:"""
+
+
+def _fallback_interpretation(result, question: str) -> str:
+    """
+    Gera interpretação simples quando LLM falha.
     
-    elif result_type == "temporal":
-        max_entry = max(result, key=lambda x: x[1])
-        min_entry = min(result, key=lambda x: x[1])
-        if is_asking_for_min:
-            return f"Mínimo em {min_entry[0]} com {min_entry[1]:,} registros. Máximo em {max_entry[0]} com {max_entry[1]:,}. Total de {len(result)} períodos."
-        else:
-            return f"Pico em {max_entry[0]} com {max_entry[1]:,} registros. Total de {len(result)} períodos."
+    Args:
+        result: Resultado do SQL
+        question: Pergunta original
     
-    elif result_type == "ranking":
-        first = result[0]
-        last = result[-1]
+    Returns:
+        Interpretação em texto simples
+    """
+    
+    try:
+        # Se é um número único
+        if isinstance(result, list) and len(result) == 1 and len(result[0]) == 1:
+            num = result[0][0]
+            return f"O resultado da consulta é: {num:,}" if isinstance(num, (int, float)) else f"O resultado é: {num}"
         
-        if is_asking_for_min:
-            # Se pergunta pede menor e resultado está ascendente, primeiro é o menor
-            return f"Menor cobertura: {first[0]} com {first[1]:,} registros. Maior: {last[0]} com {last[1]:,}. Disparidade: {last[1]/first[1]:.0f}x. Total de {len(result)} entidades."
-        else:
-            # Se pergunta pede maior e resultado está descendente, primeiro é o maior
-            return f"Maior cobertura: {first[0]} com {first[1]:,} registros. Menor: {last[0]} com {last[1]:,}. Total de {len(result)} entidades."
+        # Se é ranking/distribuição
+        if isinstance(result, list) and len(result) > 0 and len(result[0]) == 2:
+            first_item = result[0]
+            label = str(first_item[0])
+            value = first_item[1]
+            
+            if len(result) == 1:
+                return f"Resultado encontrado: {label} com {value:,}."
+            else:
+                return f"Resultado: {label} lidera com {value:,}, seguido por {len(result)-1} outras categorias."
+        
+        # Fallback genérico
+        return f"Consulta retornou {len(result)} registros. Primeiros dados: {result[0] if result else 'vazio'}"
     
-    else:
-        return f"Encontrei {len(result)} registros"
+    except Exception as e:
+        logger.error(f"Erro no fallback: {e}")
+        return f"Consulta executada com sucesso ({len(result)} registros). Verifique os dados no detalhe."

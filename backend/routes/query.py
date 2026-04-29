@@ -69,8 +69,7 @@ def is_valid_sql(sql: str, dataset: str = "covid-19-vacinacao") -> bool:
     
     Dataset→Tabela Mapping:
         - covid-19-vacinacao → vacinacao
-        - dengue-2024 → dengue
-        - influenza-2025 → influenza
+        - leitos → leitos
     """
     
     if not sql:
@@ -92,8 +91,7 @@ def is_valid_sql(sql: str, dataset: str = "covid-19-vacinacao") -> bool:
     # Mapear dataset → tabela esperada
     dataset_table_map = {
         "covid-19-vacinacao": "vacinacao",
-        "dengue-2024": "dengue",
-        "influenza-2025": "influenza"
+        "leitos": "leitos"
     }
     
     expected_table = dataset_table_map.get(dataset, "vacinacao")
@@ -142,9 +140,9 @@ def ask(req: AskRequest):
       "dataset": "covid-19-vacinacao"
     }
     
-    // Pergunta customizada (detecção automática)
+    // Pergunta customizada sobre leitos (detecção automática)
     {
-      "question": "Qual estado teve mais casos de dengue?",
+      "question": "Quais cidades têm UTI neonatal?",
       "model": "deepseek-local"
       // dataset será detectado automaticamente
     }
@@ -237,7 +235,7 @@ def ask(req: AskRequest):
         
         # 5. Interpretar
         logger.info("Interpretando resultado...")
-        insight = interpret_result(req.question, result, req.model)
+        insight = interpret_result(req.question, result, req.model, dataset=dataset_to_use)
         
         return {
             "question": req.question,
@@ -275,13 +273,10 @@ def _detect_dataset_for_question(question: str) -> Optional[str]:
             "vacina", "vacinação", "covid", "doses", "imunização", "aplicadas",
             "fabricante", "lote", "injeção", "pfizer", "astrazeneca", "dose"
         ],
-        "dengue-2024": [
-            "dengue", "aedes", "mosquito", "vetor", "epidemia", "surto",
-            "sintomas", "febre", "casos dengue", "óbitos", "arbovirose"
-        ],
-        "influenza-2025": [
-            "influenza", "gripe", "h1n1", "h3n2", "iav", "tipo a", "tipo b",
-            "tosse", "resfriado", "antiviral"
+        "leitos": [
+            "leito", "leitos", "hospital", "uti", "capacidade", "cama",
+            "camas", "internação", "estabelecimento", "saúde", "clínica",
+            "pronto forro", "pronto-forro", "ocupação", "disponível"
         ]
     }
     
