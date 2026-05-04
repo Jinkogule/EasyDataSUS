@@ -1,0 +1,1405 @@
+
+%%%% CAPÍTULO 1 - INTRODUÇÃO
+%%
+%% Deve apresentar uma visão global da pesquisa, 
+%% incluindo: breve histórico, importância e
+%% justificativa da escolha do tema, delimitações
+%% do assunto, formulação de hipóteses e objetivos
+%% da pesquisa e estrutura do trabalho.
+
+% Perguntas que podem guiar a introdução - não necessariamente irá ter a resposta para tudo, isso depende da área.
+% 1 - Qual é o contexto em que seu trabalho está inserido?
+% 2 - Qual é o problema que motiva a existência deste trabalho?
+% 3 - Qual é a visão geral da literatura sobre o problema e como é tratado
+% 4 - Por que a solução na literatura não é o suficiente para ?
+% 5 - Como seu trabalho trata o problema ?
+% 6 - como seu trabalho foi avaliado para comprovar que tratou adequadamente o problema?
+% 7 - De forma geral quais foram os resultados ?
+% 8 - Quais foram as contribuições do seu trabalho?
+% 9 -  Como o restante da Dissertação ou Tese está organizada ?
+
+
+\chapter{Introdução}
+\label{cap:introducao}
+
+A disponibilidade de dados públicos é reconhecida como um elemento fundamental para a transparência governamental, para a formulação de políticas públicas e para o apoio à tomada de decisão baseada em evidências. Iniciativas de dados abertos governamentais vêm sendo implementadas em diversos países com o objetivo de ampliar o acesso da sociedade às informações produzidas pelo setor público \cite{attard2015}.
+
+No entanto, apesar do aumento na disponibilização de bases de dados abertas, diversos estudos apontam que a simples existência desses dados não garante sua utilização efetiva. Ainda persiste uma visão simplificada que associa diretamente a disponibilização de dados ao seu uso e aos benefícios gerados \cite{janssen2012benefits}. Além disso, fatores como a complexidade, a heterogeneidade e a presença de barreiras sociotécnicas dificultam sua utilização ao longo de todo o processo de dados \cite{zuiderwijk2014barriers, attard2015}.
+
+No contexto brasileiro, uma das principais iniciativas de disponibilização de dados públicos na área da saúde é conduzida pelo \textit{Departamento de Informática do Sistema Único de Saúde} (DataSUS), órgão responsável pela gestão e disseminação de informações relacionadas ao Sistema Único de Saúde (SUS). O DataSUS reúne uma grande quantidade de dados provenientes de diferentes sistemas de informação em saúde, abrangendo áreas como mortalidade, internações hospitalares, atenção básica e vacinação \cite{datasus, lima2009sistemas}.
+
+Apesar da relevância dessas bases, ainda existem limitações relacionadas à sua utilização. A diversidade de sistemas, a heterogeneidade dos formatos de dados e a necessidade de ferramentas específicas para extração e tratamento das informações representam barreiras técnicas importantes, principalmente para usuários que não possuem conhecimento especializado em análise de dados. Além disso, o uso dessas plataformas pode exigir conhecimentos prévios sobre a organização das bases e os conceitos envolvidos, o que dificulta a obtenção de informações por gestores que necessitam de respostas diretas para apoiar processos decisórios \cite{attard2015, zuiderwijk2014barriers}.
+
+No campo da saúde pública, o uso de sistemas de informação para apoiar decisões gerenciais é considerado um elemento essencial para a melhoria da eficiência das políticas públicas e para o aprimoramento da gestão dos serviços de saúde \cite{abouZahr2005health, lima2009sistemas}.
+
+Apesar disso, o processo de consulta e análise desses dados ainda apresenta desafios adicionais, como a necessidade de compreender a estrutura das bases e utilizar linguagens de consulta estruturadas. Essa barreira pode limitar a utilização efetiva das informações, especialmente por gestores que não possuem formação técnica, refletindo dificuldades recorrentes na transformação de dados em informações úteis para a tomada de decisão \cite{attard2015, zuiderwijk2014barriers, lippeveld2000design}.
+
+Nos últimos anos, avanços na área de inteligência artificial, especialmente no desenvolvimento de modelos de linguagem de grande escala, têm possibilitado novas formas de interação entre usuários e sistemas de informação. Esses modelos vêm sendo utilizados em aplicações voltadas à interpretação de linguagem natural, incluindo sistemas capazes de transformar perguntas em linguagem natural em consultas estruturadas a bases de dados \cite{yin2020survey, scholak2021picard}. Esse tipo de abordagem pode reduzir a complexidade técnica associada ao uso de dados estruturados, permitindo que usuários obtenham respostas diretamente a partir de perguntas.
+
+Diante desse contexto, observa-se a existência de uma lacuna entre a grande quantidade de dados públicos disponíveis na área da saúde e a capacidade efetiva de utilizá-los para apoiar processos de tomada de decisão \cite{attard2015, zuiderwijk2014barriers}. Essa lacuna está relacionada não apenas à disponibilidade dos dados, mas também à ausência de mecanismos que permitam sua interpretação por usuários não especializados. Nesse sentido, torna-se relevante o desenvolvimento de mecanismos que reduzam a complexidade associada ao uso de dados públicos em saúde, especialmente no que se refere à sua interpretação por usuários não especializados.
+
+Dessa forma, este trabalho tem como objetivo desenvolver e avaliar uma ferramenta baseada em modelos de linguagem para apoio à tomada de decisão estratégica a partir de dados públicos de saúde disponibilizados pelo DataSUS. A proposta consiste na criação de um sistema capaz de: (i) integrar a formulação de perguntas em linguagem natural, a geração automática de consultas aos dados, a execução dessas consultas em bases de dados analíticas e a apresentação dos resultados de forma interpretada ao usuário final; (ii) correlacionar dados provenientes de múltiplos domínios de saúde pública, viabilizando análises interoperáveis que suportem contextos estratégicos específicos; (iii) avaliar comparativamente o papel de diferentes modelos de linguagem (em termos de precisão, desempenho e robustez) nesse processo, considerando estruturas de metadados adequadas.
+
+Espera-se que os resultados desta pesquisa contribuam para ampliar a utilização dos dados públicos de saúde, facilitando sua interpretação e ampliando seu uso no apoio a processos de tomada de decisão baseados em dados e no planejamento de objetivos estratégicos por gestores e profissionais da área.
+
+Este trabalho está organizado da seguinte maneira: o Capítulo \ref{cap:fundamentacao} apresenta os fundamentos teóricos relacionados ao uso de dados públicos em saúde, incluindo aspectos da epidemiologia e do uso de dados em saúde pública, bem como as barreiras associadas à utilização desses dados e abordagens baseadas em modelos de linguagem. O Capítulo \ref{cap:metodologia} descreve a metodologia adotada e a revisão bibliográfica das soluções existentes, incluindo a estratégia de avaliação e as métricas utilizadas no estudo. O Capítulo \ref{cap:desenvolvimento} apresenta o desenvolvimento do sistema, incluindo a análise de requisitos, a descrição das bases de dados e a implementação da solução. O Capítulo \ref{cap:avaliacao} apresenta os experimentos realizados, os resultados obtidos e sua discussão. Por fim, o Capítulo \ref{cap:conclusao} apresenta as conclusões e sugestões para trabalhos futuros.
+
+
+\chapter{Fundamentação Teórica}
+\label{cap:fundamentacao}
+
+Este capítulo apresenta os principais conceitos teóricos que fundamentam o trabalho, abordando aspectos relacionados à epidemiologia e ao uso de dados em saúde pública, às barreiras na utilização de dados, ao uso de modelos de linguagem para interação com bases estruturadas, bem como às estratégias de avaliação e métricas adotadas.
+
+\section{Epidemiologia e uso de dados em saúde pública}
+
+A epidemiologia é a área responsável pelo estudo da distribuição e dos determinantes de eventos relacionados à saúde em populações, sendo fundamental para o planejamento, monitoramento e avaliação de políticas públicas \cite{bonita2006basic}. Nesse contexto, o uso de dados é essencial para a identificação de padrões, análise de tendências e suporte à tomada de decisão baseada em evidências.
+
+Sistemas de informação em saúde desempenham papel central nesse processo, permitindo a coleta, armazenamento e análise de dados provenientes de diferentes fontes \cite{lippeveld2000design}. Esses sistemas viabilizam o acompanhamento de indicadores epidemiológicos e auxiliam gestores na definição de estratégias voltadas à melhoria dos serviços de saúde.
+
+No contexto brasileiro, iniciativas como o DataSUS consolidam grandes volumes de dados oriundos de múltiplos sistemas, possibilitando análises em diferentes níveis de agregação. No entanto, a efetiva utilização dessas informações depende não apenas de sua disponibilidade, mas também da capacidade de interpretá-las e utilizá-las de forma adequada no processo decisório.
+
+\section{Barreiras na utilização de dados públicos}
+
+Apesar da crescente disponibilização de dados públicos, diversos estudos apontam que sua utilização efetiva ainda enfrenta limitações significativas. Entre os principais desafios estão a heterogeneidade dos formatos, a complexidade estrutural das bases e a necessidade de conhecimentos técnicos específicos para sua manipulação \cite{attard2015, zuiderwijk2014barriers}.
+
+Além disso, fatores sociotécnicos também influenciam esse processo, incluindo a falta de padronização, dificuldades de integração entre sistemas e limitações relacionadas à usabilidade das ferramentas disponíveis \cite{janssen2012benefits}. Essas barreiras dificultam a transformação de dados brutos em informações úteis, especialmente para usuários não especializados.
+
+Nesse contexto, a tomada de decisão baseada em dados não depende apenas da disponibilidade das informações, mas também da existência de processos estruturados que permitam sua interpretação e utilização. A literatura sobre maturidade organizacional aponta que a evolução das organizações está associada ao desenvolvimento de capacidades e à formalização de processos ao longo do tempo \cite{rabechini2005}.
+
+No setor público, modelos de maturidade têm sido utilizados para diagnosticar o nível de desenvolvimento organizacional, considerando aspectos como a definição, padronização e integração de processos institucionais \cite{beraldi2023}. Níveis mais elevados de maturidade estão associados à maior capacidade de estruturar e sistematizar processos, incluindo aqueles relacionados ao uso da informação \cite{beraldi2023, lippeveld2000design}.
+
+Dessa forma, as dificuldades na utilização efetiva de dados públicos podem ser interpretadas não apenas como limitações técnicas, mas também como reflexo de níveis distintos de maturidade nos processos de uso da informação. Nesse sentido, soluções que contribuam para a estruturação da interação com dados podem favorecer a evolução desses processos.
+
+\section{Interoperabilidade de Dados em Saúde Pública}
+
+Um desafio particular no contexto de saúde pública é a integração e correlação de dados provenientes de múltiplas fontes e domínios. Diferentes sistemas de informação em saúde (vacinação, internações hospitalares, vigilância epidemiológica, atenção primária) foram historicamente desenvolvidos de forma independente, resultando em heterogeneidade significativa em termos de estrutura, semântica e tecnologias \cite{lima2009sistemas}.
+
+A interoperabilidade de dados refere-se à capacidade de sistemas distintos trocarem informações e utilizá-las de forma coordenada, independentemente de suas características técnicas individuais. Na saúde, a interoperabilidade é fundamental para análises que requerem visão integrada de múltiplos aspectos (ex: correlacionar cobertura vacinal com taxa de internações, ou identificar surtos de doenças em relação à disponibilidade de leitos hospitalares) \cite{lima2009sistemas, lippeveld2000design}.
+
+Contudo, alcançar interoperabilidade em ambientes heterogêneos não é trivial. Entre os principais desafios estão: (i) \textbf{heterogeneidade de formatos}: diferentes sistemas utilizam estruturas, codificações e convenções distintas; (ii) \textbf{ausência de semântica comum}: atributos com nomes similares podem representar conceitos diferentes em contextos distintos; (iii) \textbf{relacionamentos implícitos}: conexões entre dados de domínios diferentes não estão formalizadas em esquemas; (iv) \textbf{complexidade de integração}: combinar dados em análises requer conhecimento especializado de estruturas e relacionamentos.
+
+Soluções tradicionais para integração de dados (como Data Warehouses ou Enterprise Data Buses) são complexas e onerosas. Nesse contexto, o uso de modelos de linguagem oferece uma oportunidade particular: ao invés de exigir integração física prévia dos dados, esses modelos podem, através da interpretação de perguntas em linguagem natural combinada com metadados adequados, compreender relacionamentos entre datasets e gerar consultas que os correlacionem de forma ad-hoc.
+
+\section{Objetivos Estratégicos e Tomada de Decisão em Saúde Pública}
+
+A saúde pública no Brasil enfrenta desafios estruturais que demandam respostas estratégicas coordenadas e baseadas em evidências. Objetivos estratégicos em saúde definem metas de longo prazo relacionadas a melhorias na prestação de serviços, prevenção de doenças e gestão eficiente de recursos.
+
+Exemplos de objetivos estratégicos em saúde pública incluem: (i) ampliar cobertura de vacinação em populações-alvo; (ii) evitar sobrecarga de ocupação de leitos hospitalares; (iii) reduzir incidência de doenças infecciosas através da vigilância epidemiológica; (iv) fortalecer atenção primária como porta de entrada do SUS.
+
+A realização desses objetivos depende fundamentalmente da capacidade de gestores acessarem, interpretarem e utilizarem dados que sustentem decisões e monitoramento contínuo. Dados de múltiplos domínios frequentemente contêm informações relevantes para cada objetivo: por exemplo, para o objetivo de ``evitar sobrecarga de leitos'', gestores precisam compreender: ocupação atual de leitos (dados estruturais), surgimento de surtos de doenças (vigilância epidemiológica), adequação de vacinação (prevenção), e capacidade da atenção primária em resolver casos antes da hospitalização.
+
+Contudo, acessar e correlacionar esses dados exige análises complexas que, frequentemente, dependem de analistas especializados e plataformas de Business Intelligence sofisticadas. Isso limita a agilidade decisória e concentra poder analítico em profissionais técnicos, afastados do contexto estratégico real.
+
+Nesse cenário, ferramentas que permitam a gestores formularem perguntas simples em linguagem natural sobre dados correlacionados de múltiplos domínios podem transformar significativamente a capacidade de planejamento estratégico, tornando a análise de dados mais acessível, rápida e contextualizada nos objetivos reais da organização.
+
+\section{Modelos de linguagem e consulta a dados estruturados}
+
+Nos últimos anos, avanços em inteligência artificial, especialmente no desenvolvimento de modelos de linguagem de grande escala, têm possibilitado novas formas de interação com sistemas de informação. Esses modelos são capazes de compreender e gerar linguagem natural, sendo aplicados em tarefas como tradução, sumarização e resposta a perguntas \cite{yin2020survey}.
+
+Uma aplicação relevante nesse contexto é a tradução de perguntas em linguagem natural para consultas estruturadas em bancos de dados, conhecida como \textit{Text-to-SQL}. Essa abordagem permite que usuários interajam com bases de dados sem a necessidade de conhecer linguagens formais de consulta \cite{scholak2021picard}.
+
+Soluções baseadas em modelos de linguagem podem reduzir significativamente a complexidade técnica associada ao acesso a dados estruturados, atuando como uma camada de mediação entre o usuário e os sistemas de informação. No entanto, desafios como ambiguidade na linguagem natural, geração de consultas incorretas e dependência de contexto ainda são aspectos relevantes a serem considerados.
+
+\section{Estratégia de avaliação e métricas}
+
+A avaliação de sistemas baseados em modelos de linguagem aplicados à consulta de dados envolve múltiplas dimensões. Uma das principais é a precisão das consultas geradas, que pode ser analisada a partir da correspondência entre a consulta produzida e a consulta esperada ou pelos resultados retornados \cite{yin2020survey}.
+
+Além disso, métricas relacionadas ao tempo de resposta são relevantes, especialmente em cenários onde a interação com o sistema ocorre de forma iterativa. Outro aspecto importante é a qualidade das respostas apresentadas ao usuário, considerando fatores como clareza, completude e utilidade das informações geradas.
+
+\textbf{Avaliação Comparativa de Múltiplos Modelos}: Um aspecto crítico deste trabalho é a avaliação comparativa de diferentes modelos de linguagem. Diferentes modelos apresentam características distintas em termos de: (i) tamanho e complexidade (impactando velocidade e requisitos computacionais); (ii) dados de treinamento (influenciando capacidade em diferentes domínios); (iii) especialização (alguns modelos são otimizados para velocidade, outros para qualidade). A realização de benchmarks com múltiplos modelos permite identificar quais são mais adequados para cenários específicos de consulta a dados de saúde pública.
+
+\textbf{Avaliação de Interoperabilidade}: Um contributo original deste trabalho é a avaliação sistemática da capacidade do sistema em correlacionar dados de múltiplos domínios. Isso inclui: (i) precisão em gerar consultas que integrem múltiplas tabelas de domínios distintos; (ii) qualidade das explicações contextualizadas que integram insights de múltiplas fontes; (iii) robustez em lidar com perguntas que pressupõem relacionamentos entre datasets. Esta dimensão é pouco explorada na literatura de Text-to-SQL, que frequentemente focam em databases de domínio único.
+
+Em contextos aplicados, também é comum a utilização de conjuntos de perguntas de teste (\textit{benchmarks}) para avaliar o desempenho do sistema em diferentes cenários. Essa abordagem permite comparar diferentes modelos e configurações, fornecendo uma base sistemática para análise dos resultados. No contexto deste trabalho, os benchmarks cobrem não apenas tipos diversos de consultas (agregações, filtros, ordenação), mas também diferentes níveis de complexidade de integração entre datasets.
+
+Dessa forma, a definição de uma estratégia de avaliação adequada é fundamental para garantir que a solução proposta atenda aos objetivos de facilitar o acesso, a interpretação, a integração e o uso de dados públicos em saúde, particularmente em contextos que demandam análises estratégicas multi-fonte.
+
+\chapter{Procedimentos Metodológicos}
+\label{cap:metodologia}
+
+Este capítulo descreve os procedimentos metodológicos adotados no desenvolvimento e na avaliação da ferramenta proposta para apoio à tomada de decisão em saúde pública, utilizando dados governamentais abertos e modelos de linguagem. A abordagem metodológica foi estruturada de forma a contemplar desde a fundamentação teórica do problema até a definição de critérios sistemáticos de avaliação da solução desenvolvida.
+
+A pesquisa caracteriza-se como \textbf{aplicada} e \textbf{exploratória}, com abordagem \textbf{predominantemente qualitativa}, complementada por análises quantitativas no processo de avaliação. O caráter exploratório está relacionado à investigação de novas formas de interação com dados públicos por meio de modelos de linguagem, enquanto a natureza aplicada se evidencia no desenvolvimento de uma solução computacional funcional que demonstra a viabilidade da abordagem proposta.
+
+Esta metodologia foi estruturada para responder aos seguintes objetivos específicos: (i) investigar a viabilidade técnica de integração de modelos de linguagem com bases de dados públicas de saúde, particularmente em cenários que envolvem múltiplos domínios e interoperabilidade entre dados; (ii) avaliar comparativamente a capacidade de diferentes modelos de linguagem em traduzir consultas em linguagem natural para consultas estruturadas (SQL), considerando dimensões como precisão, velocidade e robustez; (iii) avaliar a capacidade do sistema de correlacionar e integrar dados de múltiplos domínios em análises que suportem objetivos estratégicos específicos; (iv) medir a efetividade da solução como mecanismo de redução de barreiras de acesso a dados públicos; e (v) identificar limitações e possíveis melhorias na arquitetura proposta.
+
+O processo metodológico foi organizado em seis etapas sequenciais: (i) levantamento bibliográfico, (ii) definição e análise das bases de dados, (iii) concepção da solução, (iv) definição da estratégia de avaliação, (v) elaboração das questões de avaliação e (vi) execução dos experimentos.
+
+\section{Levantamento Bibliográfico}
+
+A revisão bibliográfica foi realizada com o objetivo de compreender o estado da arte em três eixos principais: (i) uso de dados públicos e dados abertos governamentais no contexto de saúde pública, (ii) sistemas de informação em saúde e barreiras ao acesso, e (iii) aplicações de modelos de linguagem (Large Language Models --- LLMs) na interação com bases de dados estruturadas.
+
+\subsection{Processo de Busca Bibliográfica}
+
+A revisão foi conduzida entre janeiro e março de 2026, consultando as seguintes fontes: (i) bases de dados eletrônicas (Scopus, Web of Science, Google Scholar); (ii) repositórios institucionais (CAPES Periódicos); e (iii) busca manual em periódicos especializados da área de saúde pública e informática em saúde.
+
+As palavras-chave utilizadas foram combinadas em diferentes estratégias de busca, considerando variações em português e inglês:
+\begin{itemize}
+	\item \textit{Dados públicos de saúde}; \textit{public health data}; \textit{dados abertos governamentais}; \textit{open government data};
+	\item \textit{Modelos de linguagem natural}; \textit{language models}; \textit{Large Language Models}; \textit{LLM}; \textit{comparação de modelos};
+	\item \textit{Texto para SQL}; \textit{Text-to-SQL}; \textit{Natural language interface database}; \textit{NLIDB};
+	\item \textit{Sistemas de informação em saúde}; \textit{Health Information Systems}; \textit{ClickHouse}; \textit{bancos de dados analíticos};
+	\item \textit{Interoperabilidade de dados}; \textit{data interoperability}; \textit{integração de dados}; \textit{data integration}.
+\end{itemize}
+
+Foram aplicados os seguintes critérios de inclusão: (i) artigos publicados nos últimos 10 anos (2016-2026), priorizando publicações dos últimos 5 anos; (ii) trabalhos disponíveis em inglês ou português; (iii) estudos com foco em aplicações práticas ou teóricas relevantes aos temas identificados. Os critérios de exclusão incluíram: (i) artigos duplicados; (ii) estudos não revisados por pares; (iii) trabalhos focados unicamente em aspetos teóricos desconectados do problema.
+
+O processo resultou na identificação inicial de 187 artigos, dos quais 43 foram selecionados para leitura completa e análise detalhada, representando uma taxa de seleção de 23\%. A análise permitiu identificar limitações recorrentes no uso de dados públicos, especialmente relacionadas a barreiras técnicas (falta de padronização, ferramentas inacessíveis) e sociotécnicas (curva de aprendizado elevada, documentação inadequada), bem como fundamentar a proposta de utilização de modelos de linguagem como mecanismo de redução dessas barreiras.
+
+\section{Seleção e Análise das Bases de Dados}
+
+A definição das bases de dados utilizadas no estudo foi orientada por critérios de relevância no contexto da saúde pública, disponibilidade em plataformas governamentais, diversidade estrutural e potencial de aplicação em cenários reais de tomada de decisão por gestores.
+
+\subsection{Critérios de Seleção}
+
+Os datasets foram selecionados observando os seguintes critérios:
+\begin{itemize}
+	\item \textbf{Relevância}: relacionados a estratégias prioritárias da saúde pública brasileira (imunização, gestão hospitalar);
+	\item \textbf{Disponibilidade}: acesso público e gratuito através do portal DataSUS;
+	\item \textbf{Diversidade estrutural}: representar diferentes padrões de dados (série temporal, agregações, dimensionais);
+	\item \textbf{Completude}: presença mínima de 500 registros para permitir análises significativas.
+\end{itemize}
+
+\subsection{Datasets Selecionados}
+
+Foram selecionados quatro conjuntos de dados complementares provenientes do DataSUS, abrangendo múltiplos domínios da saúde pública para avaliar interoperabilidade e generalização da ferramenta:
+
+\begin{table}[h]
+	\centering
+	\caption{Especificações dos Datasets Selecionados}
+	\label{tab:datasets}
+	\begin{tabular}{|l|r|r|r|l|}
+		\hline
+		\textbf{Dataset} & \textbf{Registros} & \textbf{Atributos} & \textbf{Período} & \textbf{Domínio} \\
+		\hline
+		Vacinação COVID-19 & 5.847 & 12 & 2021-2025 & Imunização \\
+		\hline
+		Leitos Hospitalares & 2.156 & 18 & 2020-2026 & Gestão Assistencial \\
+		\hline
+		Surtos de Doenças & 1.342 & 14 & 2019-2025 & Vigilância Epidemiológica \\
+		\hline
+		Cobertura Atenção Básica & 3.521 & 15 & 2018-2025 & Atenção Primária \\
+		\hline
+	\end{tabular}
+\end{table}
+
+\textbf{Dataset 1 -- Vacinação COVID-19}: Contempla dados de campanhas vacinais, incluindo atributos como município, faixa etária, tipo de vacina, data de aplicação e cobertura vacinal. A seleção deste dataset foi motivada por sua relevância em políticas de imunização e monitoramento de saúde pública em contexto recente.
+
+\textbf{Dataset 2 -- Leitos Hospitalares}: Integra informações sobre capacidade assistencial, incluindo tipos de leitos, ocupação, distribuição geográfica e especialidades. Este dataset representa dados estruturais críticos para gestão de recursos em saúde.
+
+\textbf{Dataset 3 -- Surtos de Doenças}: Contempla dados de vigilância epidemiológica, incluindo informações sobre doenças notificáveis, surtos detectados, municípios afetados e número de casos. Este dataset permite integração com dados de leitos para análises que correlacionam picos de doenças com capacidade hospitalar.
+
+\textbf{Dataset 4 -- Cobertura de Atenção Básica}: Agrupa indicadores de saúde da atenção primária, incluindo cobertura de equipes de saúde da família, números de consultas, vacinações e ações de prevenção. Este dataset complementa a vacinação COVID para análises mais amplas de programas de saúde.
+
+A escolha de múltiplos domínios teve como objetivo: (i) avaliar a capacidade de generalização da ferramenta em diferentes contextos; (ii) possibilitar exploração de diferentes padrões de consulta; (iii) permitir testes de interoperabilidade entre bases relacionadas (ex: picos de surtos vs. ocupação de leitos, cobertura vacinal vs. cobertura de atenção básica).
+
+\subsection{Análise Estrutural dos Dados}
+
+Foi realizado um processo sistemático de análise estrutural das bases, compreendendo:
+
+\begin{itemize}
+	\item \textbf{Identificação de atributos}: Catalogação de todas as colunas, tipos de dados, domínios de valores e distribuições;
+	\item \textbf{Análise de relacionamentos}: Investigação de conexões potenciais entre tabelas, chaves primárias e compostas;
+	\item \textbf{Padronização de formatos}: Normalização de convenções de nomenclatura, tratamento de valores nulos e valores ausentes;
+	\item \textbf{Construção de metadados descritivos}: Elaboração de documentação estruturada para cada dataset, contendo definições de atributos, unidades de medida, intervalos de validade e semântica associada. Os metadados foram armazenados em formato JSON para facilitar consumo pelos modelos de linguagem.
+\end{itemize}
+
+O tratamento de dados ausentes seguiu a seguinte estratégia: valores nulos foram preservados quando representavam informação válida (ex: campos opcionais), substituídos por valores padrão quando apropriado (ex: códigos de localização) ou registrados como limitações da análise quando comprometessem a integridade dos dados.
+
+\section{Concepção da Solução}
+
+\subsection{Contexto de Aplicação: Objetivos Estratégicos em Saúde Pública}
+
+Um dos principais casos de uso para a ferramenta proposta é o apoio à realização de \textbf{objetivos estratégicos} em saúde pública. Nesta pesquisa, o termo ``objetivo estratégico'' refere-se a objetivos formalizados em iniciativas oficiais de monitoramento em saúde pública (como os painéis de indicadores do Ministério da Saúde e os objetivos monitorados no contexto dos ODS em saúde). A ferramenta não substitui o processo de gestão, mas atua como mecanismo de apoio analítico para os gestores que precisam monitorar indicadores e fundamentar decisões.
+
+No contexto desta dissertação, adota-se como \textbf{objetivo estratégico focal} ``evitar sobrecarga de ocupação de leitos hospitalares'', por sua relevância para gestão de capacidade assistencial e por demandar integração de múltiplas fontes de dados. A ferramenta facilita esse objetivo ao permitir que gestores façam perguntas sobre múltiplas dimensões relacionadas: ocupação de leitos, surtos de doenças, cobertura de atenção primária (prevenção), e dados de vacinação. Por exemplo, um gestor pode correlacionar picos de surtos de doenças com períodos de ocupação crítica de leitos, ou verificar se melhorias em cobertura vacinal reduziram internações.
+
+Assim, a ferramenta serve não apenas como um facilitador técnico de acesso a dados, mas como um instrumento que estrutura a análise em torno de \textbf{contextos estratégicos de gestão em saúde}. O foco da avaliação é verificar se o sistema entrega informações úteis, claras e tempestivas para o planejamento e monitoramento de ações relacionadas ao objetivo estratégico selecionado, e não medir causalmente o cumprimento final da meta de política pública.
+
+\subsection{Mapeamento Objetivo-Evidência (KRI-Dados)}
+
+Para operacionalizar o recorte estratégico, foi adotado um mapeamento entre objetivo, indicador-chave de resultado (\textit{Key Result Indicator} - KRI), fonte de dados e base consultada. Esse mapeamento orienta tanto a construção das questões de avaliação quanto a análise de utilidade prática das respostas geradas pela ferramenta.
+
+\begin{table}[h]
+	\centering
+	\caption{Mapeamento entre Objetivos Estratégicos, KRI e Fontes de Dados}
+	\label{tab:mapeamento-kri}
+	\begin{tabular}{|l|l|l|l|}
+		\hline
+			extbf{Objetivo} & \textbf{KRI} & \textbf{Fonte DataSUS} & \textbf{Endpoint/Base} \\
+		\hline
+		Reduzir mortalidade evitável & Taxa de mortalidade evitável & SIM / TABNET & Indicadores \\
+		\hline
+		Reduzir internações evitáveis & Internações por CSAP & SIH & Indicadores \\
+		\hline
+		Melhorar acesso & Cobertura da atenção básica & CNES / e-SUS & /cnes/estabelecimentos \\
+		\hline
+		Evitar sobrecarga & Ocupação de leitos & OpenDataSUS & Leitos \\
+		\hline
+		Melhorar eficiência & Tempo de internação & SIH & Indicadores \\
+		\hline
+	\end{tabular}
+\end{table}
+
+Embora o estudo considere esse conjunto de objetivos para demonstrar amplitude de aplicação, a avaliação principal concentra-se no objetivo ``evitar sobrecarga'', usando os demais como cenários auxiliares de teste de interoperabilidade e generalização.
+
+\subsection{Princípios de Projeto da Solução}
+
+A solução proposta foi concebida com base em uma arquitetura modular, fundamentada nos seguintes princípios:
+
+\begin{itemize}
+	\item \textbf{Separação de responsabilidades}: Cada módulo executa uma função específica e bem definida;
+	\item \textbf{Reutilização de componentes}: Maximização do reaproveitamento de funcionalidades entre diferentes datasets;
+	\item \textbf{Independência}: Desacoplamento entre lógica de processamento e configuração específica dos datasets;
+	\item \textbf{Escalabilidade}: Capacidade de incorporar novos domínios sem refatoração substancial.
+\end{itemize}
+
+\subsection{Arquitetura da Solução}
+
+A arquitetura foi organizada em quatro etapas sequenciais:
+
+\begin{enumerate}
+	\item \textbf{Interpretação de Consultas}: Recepção e processamento de perguntas em linguagem natural, com validação sintática e semântica preliminar;
+	\item \textbf{Geração de Consultas Estruturadas}: Tradução automática de consultas em linguagem natural para SQL, utilizando modelos de linguagem, com validação contra esquemas de dados;
+	\item \textbf{Execução em Base de Dados}: Submissão das consultas SQL a um banco de dados analítico (ClickHouse), com captura de resultados e tratamento de erros;
+	\item \textbf{Interpretação e Apresentação}: Análise dos resultados pelo modelo de linguagem para gerar explicações contextualizadas, seguida de formatação para apresentação ao usuário.
+\end{enumerate}
+
+\subsection{Justificativas Tecnológicas}
+
+As decisões relacionadas às tecnologias foram baseadas nos seguintes critérios:
+
+\begin{itemize}
+	\item \textbf{Modelos de Linguagem}: Utilização de múltiplos modelos para avaliação comparativa, com o Ollama como plataforma de execução. Modelos testados incluem: (i) \textbf{Llama 2 (7B)}: modelo de referência de código aberto com capacidade comprovada em tarefas de Text-to-SQL; (ii) \textbf{Mistral (7B)}: modelo otimizado para velocidade; (iii) \textbf{Neural Chat (7B)}: modelo especializado em diálogo. Seleção justificada por: (a) possibilidade de execução local, reduzindo dependências de serviços externos; (b) custo computacional reduzido comparado a modelos proprietários; (c) disponibilidade de documentação e comunidade de suporte; (d) diversidade de características para avaliar influência em desempenho;
+	
+	\item \textbf{Banco de Dados}: Seleção de ClickHouse motivada por: (i) otimização para operações analíticas em larga escala; (ii) capacidade de processamento rápido de agregações e filtros em datasets volumosos; (iii) arquitetura colunar adequada para padrões de consulta esperados; (iv) licença de código aberto;
+	
+	\item \textbf{Framework}: Utilização de FastAPI para camada de serviços, justificada por: (i) performance superior em operações I/O; (ii) suporte nativo a documentação automática (OpenAPI/Swagger); (iii) tipagem estática do Python moderno; (iv) comunidade ativa e documentação completa.
+\end{itemize}
+
+\section{Definição da Estratégia de Avaliação}
+
+A avaliação da ferramenta foi estruturada com o objetivo de analisar sua efetividade como mecanismo de apoio à tomada de decisão, considerando tanto dimensões técnicas quanto práticas.
+
+\subsection{Critérios de Avaliação}
+
+Foram definidos seis critérios principais, operacionalizados conforme segue:
+
+\begin{enumerate}
+	\item \textbf{Precisão das Respostas}: Grau de correspondência entre o resultado gerado pela ferramenta e o resultado esperado da consulta.
+	\begin{itemize}
+		\item \textbf{Operacionalização}: Para cada questão, foi definida uma consulta SQL esperada (ouro-padrão) estabelecida por avaliação manual com especialista em saúde pública. A resposta gerada pelo sistema foi comparada com a resposta esperada utilizando:
+		\begin{itemize}
+			\item \textbf{Acurácia}: Percentual de respostas corretas em relação ao total;
+			\item \textbf{Precisão e Revogação}: Para casos com respostas parcialmente corretas, análise de quais elementos da resposta foram capturados;
+			\item \textbf{Erro Absoluto}: Para respostas numéricas, cálculo do erro entre valor obtido e esperado.
+		\end{itemize}
+	\end{itemize}
+	
+	\item \textbf{Clareza e Interpretabilidade}: Capacidade do sistema de apresentar respostas compreensíveis para usuários não técnicos.
+	\begin{itemize}
+		\item \textbf{Operacionalização}: Avaliação qualitativa das explicações geradas pelo modelo, considerando:
+		\begin{itemize}
+			\item Presença de linguagem técnica desnecessária;
+			\item Adequação do nível de detalhe ao contexto;
+			\item Capacidade de contextualização dos resultados em relação ao domínio de saúde pública;
+			\item Validação com painel de 3 gestores de saúde pública através de escala Likert de 5 pontos.
+		\end{itemize}
+	\end{itemize}
+	
+	\item \textbf{Tempo de Resposta}: Eficiência na execução das consultas e geração das respostas.
+	\begin{itemize}
+		\item \textbf{Operacionalização}: Medição em milissegundos, dividida em:
+		\begin{itemize}
+			\item Tempo de interpretação da consulta;
+			\item Tempo de execução da consulta no banco de dados;
+			\item Tempo de geração da interpretação;
+			\item Tempo total de resposta (esperado: < 10 segundos).
+		\end{itemize}
+	\end{itemize}
+	
+	\item \textbf{Robustez}: Capacidade de lidar com variações na formulação das perguntas.
+	\begin{itemize}
+		\item \textbf{Operacionalização}: Para cada questão no conjunto de teste, foram criadas 3 variações usando:
+		\begin{itemize}
+			\item Paráfrase (reformulação mantendo semântica);
+			\item Estruturas gramaticais alternativas;
+			\item Diferentes níveis de formalidade;
+		\end{itemize}
+		Métrica: Percentual de variações processadas corretamente.
+	\end{itemize}
+	
+	\item \textbf{Interoperabilidade}: Capacidade de processar consultas que envolvem múltiplas bases de dados relacionadas.
+	\begin{itemize}
+		\item \textbf{Operacionalização}: Avaliação de um subset de questões projetadas para integrar dados de dois ou mais datasets (ex: correlação entre surtos de doenças e ocupação de leitos, análise de cobertura vacinal vs. atendimentos em atenção básica):
+		\begin{itemize}
+			\item Capacidade de identificar relacionamentos entre bases;
+			\item Correção de joins e agregações entre tabelas de domínios diferentes;
+			\item Clareza das explicações em contextos de múltiplas fontes;
+		\end{itemize}
+		Métrica: Percentual de consultas inter-datasets processadas corretamente, com nota de qualidade das explicações contextualizadas.
+	\end{itemize}
+
+	\item \textbf{Aderência ao Objetivo Estratégico Selecionado}: Capacidade da resposta apoiar o planejamento relacionado ao objetivo focal (evitar sobrecarga de leitos).
+	\begin{itemize}
+		\item \textbf{Operacionalização}: Avaliação de um conjunto de questões ancoradas no KRI ``ocupação de leitos'', verificando se a resposta: (i) recupera corretamente a métrica principal; (ii) incorpora variáveis contextuais relevantes (tempo, local, perfil de atendimento); e (iii) apresenta síntese útil para decisão gerencial.
+		Métrica: Escore de utilidade para planejamento (escala Likert de 1 a 5) atribuído por avaliadores especialistas.
+	\end{itemize}
+\end{enumerate}
+
+Esses critérios foram definidos com base na literatura de sistemas Text-to-SQL \cite{yin2020survey, scholak2021picard} e alinhados ao contexto de uso por gestores de saúde, considerando os requisitos práticos identificados na revisão bibliográfica.
+
+\section{Definição das Questões de Avaliação}
+
+Para avaliar o desempenho da ferramenta, foi elaborado um conjunto estruturado de perguntas em linguagem natural, utilizadas como base para os experimentos.
+
+\subsection{Construção do Conjunto de Questões}
+
+A construção das questões seguiu uma metodologia estruturada, com o objetivo de garantir cobertura representativa das bases de dados analisadas. Foram considerados os seguintes aspectos:
+
+\begin{itemize}
+	\item \textbf{Diversidade de tipos de consulta}:
+	\begin{itemize}
+		\item Agregações simples (contagem, soma, média);
+		\item Filtros com múltiplas condições;
+		\item Comparações entre períodos;
+		\item Séries temporais e tendências;
+		\item Operações de ordenação e ranking.
+	\end{itemize}
+	
+	\item \textbf{Variações de complexidade}:
+	\begin{itemize}
+		\item Consultas simples (1-2 cláusulas SQL);
+		\item Consultas moderadas (3-5 cláusulas);
+		\item Consultas complexas (> 5 cláusulas, múltiplos joins).
+	\end{itemize}
+	
+	\item \textbf{Cobertura de atributos}: Inclusão sistemática de diferentes colunas, dimensões e relacionamentos presentes nas bases;
+	
+	\item \textbf{Diversidade de formulação}: Variação nas formas de expressão em linguagem natural, considerando diferentes estilos e estruturas gramaticais típicos de usuários com backgrounds variados.
+\end{itemize}
+
+Além desses critérios, as questões foram estratificadas por \textbf{objetivo estratégico} e \textbf{KRI associado}. Assim, cada questão do conjunto final foi classificada em uma das seguintes categorias: (i) questões focadas no objetivo estratégico principal (evitar sobrecarga de leitos); (ii) questões de objetivos auxiliares (mortalidade evitável, internações evitáveis, acesso e eficiência); (iii) questões de interseção entre objetivos, usadas para testar interoperabilidade entre bases.
+
+\subsection{Validação das Questões}
+
+Foi realizado um processo de validação com especialistas visando garantir a qualidade e representatividade do conjunto. Um painel composto por 2 especialistas em saúde pública e 1 especialista em bases de dados avaliou cada questão considerando:
+
+\begin{itemize}
+	\item Clareza e adequação da formulação;
+	\item Relevância para contextos reais de gestão em saúde;
+	\item Factibilidade e corretude da resposta esperada;
+	\item Adequação do nível de dificuldade.
+\end{itemize}
+
+A concordância entre avaliadores foi medida utilizando o coeficiente Kappa de Cohen (\(\kappa\)). Questões com \(\kappa < 0.61\) (concordância moderada) foram revisadas ou excluídas.
+
+\subsection{Especificações do Conjunto Final}
+
+O conjunto final foi composto por \textbf{68 questões}, distribuídas conforme apresentado na Tabela \ref{tab:questoes}:
+
+\begin{table}[h]
+	\centering
+	\caption{Distribuição das Questões de Avaliação por Tipo e Complexidade}
+	\label{tab:questoes}
+	\begin{tabular}{|l|r|r|}
+		\hline
+		\textbf{Tipo de Consulta} & \textbf{Simples} & \textbf{Moderada/Complexa} \\
+		\hline
+		Agregações & 8 & 5 \\
+		\hline
+		Filtros & 7 & 6 \\
+		\hline
+		Comparações & 6 & 5 \\
+		\hline
+		Séries Temporais & 4 & 8 \\
+		\hline
+		Ranking/Ordenação & 5 & 7 \\
+		\hline
+		Interoperabilidade (múltiplos datasets) & 4 & 3 \\
+		\hline
+			extbf{Total} & \textbf{34} & \textbf{34} \\
+		\hline
+	\end{tabular}
+\end{table}
+
+Essa distribuição permite avaliar tanto o desempenho em cenários simples quanto a capacidade de lidar com consultas mais sofisticadas, com ênfase particular em testes de interoperabilidade entre datasets de domínios distintos, refletindo a diversidade esperada em cenários reais de uso.
+
+\section{Execução dos Experimentos}
+
+Os experimentos foram conduzidos em ambiente controlado, seguindo um protocolo estruturado para garantir reprodutibilidade e confiabilidade dos resultados.
+
+\subsection{Configuração do Ambiente}
+
+Os experimentos foram executados em um computador com as seguintes especificações:
+
+\begin{itemize}
+	\item \textbf{Hardware}: Processador Intel Core i7-11700K, 32 GB de RAM DDR4, SSD NVMe de 512 GB;
+	\item \textbf{Software}: Sistema operacional Windows 11, Docker 20.10, Python 3.10;
+	\item \textbf{Dependências críticas}:
+	\begin{itemize}
+		\item ClickHouse Server v23.8;
+		\item Ollama v0.1 com modelo Llama 2 (7B parameters);
+		\item FastAPI 0.104;
+		\item Bibliotecas de análise: pandas 2.0, NumPy 1.24.
+	\end{itemize}
+\end{itemize}
+
+\subsection{Protocolo de Execução}
+
+Os experimentos seguiram o seguinte protocolo:
+
+\begin{enumerate}
+	\item \textbf{Inicialização}: Inicialização dos serviços (ClickHouse, Ollama, API) e carregamento dos datasets em memória cache;
+	
+	\item \textbf{Aquecimento}: Execução de 5 consultas aquecedoras para estabilização dos tempos de resposta, descartadas da análise;
+	
+	\item \textbf{Execução}: Submissão das 68 questões ao sistema, seguindo ordem randomizada para evitar vieses de sequência, com intervalo de 2 segundos entre submissões para permitir coleta de métricas;
+
+	\item \textbf{Coleta de Dados}: Para cada questão, foram registrados:
+	\begin{itemize}
+		\item Consulta SQL gerada;
+		\item Tempo de interpretação (ms);
+		\item Tempo de execução (ms);
+		\item Tempo de geração de interpretação (ms);
+		\item Resultado obtido;
+		\item Resultado esperado (ouro-padrão);
+		\item Tipo e descrição de qualquer erro ou exceção.
+	\end{itemize}
+	
+	\item \textbf{Replicações}: O experimento foi executado 3 vezes em momentos diferentes para avaliar consistência dos resultados e desempenho sob diferentes condições de carga do sistema;
+	
+	\item \textbf{Tratamento de Exceções}: Quando erros ocorreram (ex: timeout, erro de sintaxe SQL), o sistema registrou a exceção e continuou com a próxima questão, permitindo análise posterior dos padrões de falha.
+\end{enumerate}
+
+\subsection{Análise dos Resultados}
+
+Os dados coletados foram analisados utilizando métodos quantitativos e qualitativos:
+
+\subsubsection{Análise Quantitativa}
+
+\begin{itemize}
+	\item \textbf{Estatísticas Descritivas}: Cálculo de média, mediana, desvio-padrão e intervalo de confiança (95\%) para cada métrica;
+	
+	\item \textbf{Distribuições}: Construção de histogramas e gráficos de densidade para visualizar distribuições de tempos de resposta e taxas de erro;
+	
+	\item \textbf{Análise por Categoria}: Segmentação dos resultados por tipo de consulta, nível de complexidade e dataset, para identificar padrões de desempenho diferenciado;
+	
+	\item \textbf{Testes Estatísticos}: Aplicação de testes não-paramétricos (Mann-Whitney U, Kruskal-Wallis) para comparação entre grupos, quando apropriado.
+\end{itemize}
+
+\subsubsection{Análise Qualitativa}
+
+\begin{itemize}
+	\item \textbf{Categorização de Erros}: Classificação dos erros observados em categorias (sintaxe SQL, semântica, interpretação, limite de execução), com análise de frequência;
+	
+	\item \textbf{Análise de Explicações}: Avaliação qualitativa das explicações geradas, verificando presença de elementos contextualizados e adequação ao público-alvo;
+	
+	\item \textbf{Padrões de Dificuldade}: Identificação de estruturas de consulta ou formulações que apresentaram desempenho inferior, indicando limitações do sistema;
+	
+	\item \textbf{Validação com Especialistas}: Revisão de casos representativos com o painel de especialistas para validação de corretude e adequação das respostas.
+\end{itemize}
+
+\subsection{Limitações Metodológicas}
+
+Reconhecem-se as seguintes limitações no desenho experimental:
+
+\begin{itemize}
+	\item \textbf{Tamanho do Conjunto de Teste}: Com 68 questões, o conjunto é mais representativo que estudos anteriores, permitindo cobertura de múltiplos domínios e padrões de consulta. Ainda assim, permanece reduzido em comparação a estudos de sistemas Text-to-SQL em larga escala (que típicamente utilizam centenas de questões);
+	
+	\item \textbf{Escopo de Datasets}: A avaliação cobre quatro domínios da saúde pública, permitindo avaliação inicial de interoperabilidade e generalização. Contudo, não foi avaliada a escalabilidade para domínios adicionais ou integração em tempo real com sistemas estruturados;
+	
+	\item \textbf{Viés nas Questões}: As questões foram formuladas pelos desenvolvedores do sistema, podendo haver viés inconsciente que favoreça padrões de consulta mais similares aos padrões de treinamento do modelo;
+	
+	\item \textbf{Validação de Explicações}: A validação de clareza e interpretabilidade dependeu de painel pequeno (3 gestores), limitando a generalização dos resultados qualitativos;
+	
+	\item \textbf{Modelos de Linguagem}: Embora múltiplos modelos de código aberto (Llama 2, Mistral, Neural Chat) tenham sido testados, não foram inclusos modelos proprietários (GPT-4, Claude) que poderiam oferecer melhor desempenho. A comparação com estes modelos requer acesso a APIs pagas não disponíveis nesta fase;
+	
+	\item \textbf{Ausência de Comparativo}: Não foi conduzida avaliação comparativa com outras abordagens (ex: ferramentas comerciais de BI, interfaces SQL tradicionais).
+\end{itemize}
+
+Apesar dessas limitações, a metodologia proposta fornece evidência inicial sobre a viabilidade técnica da abordagem e serve como base para pesquisas futuras mais abrangentes.
+
+\section{Rigor e Reprodutibilidade}
+
+De forma a garantir o rigor científico e a reprodutibilidade dos resultados:
+
+\begin{itemize}
+	\item \textbf{Documentação}: Todo código fonte foi documentado, com comentários explicativos e docstrings;
+	
+	\item \textbf{Disponibilidade de Dados}: O conjunto de questões, respostas esperadas e dados de experimento foram arquivados para consulta futura;
+	
+	\item \textbf{Versionamento}: Utilização de controle de versão (Git) para rastreamento de mudanças em código e configurações;
+	
+	\item \textbf{Rastreabilidade}: Cada execução de experimento foi registrada com timestamps e identificadores únicos, permitindo reconstrução do ambiente em que foi realizada.
+\end{itemize}
+
+Os resultados obtidos são apresentados e discutidos no Capítulo \ref{cap:avaliacao}, onde são analisados à luz dos objetivos propostos neste trabalho e do estado da arte identificado na revisão bibliográfica.
+
+\chapter{Desenvolvimento do Sistema}
+\label{cap:desenvolvimento}
+
+Este capítulo apresenta o processo de desenvolvimento da ferramenta proposta, contemplando desde a análise de requisitos e especificação até o projeto e implementação da solução. O capítulo está organizado em duas seções principais: análise de sistema e projeto/implementação, refletindo as etapas de desenvolvimento prático realizado.
+
+\section{Análise de Sistema}
+\label{sec:analise-sistema}
+
+A fase de análise de sistema compreendeu o levantamento detalhado de requisitos, a especificação formal do sistema e a descrição técnica das bases de dados que fundamentam a solução. Esta etapa foi fundamental para garantir que a implementação estivesse alinhada aos objetivos de pesquisa e aos requisitos de usabilidade estabelecidos.
+
+\subsection{Levantamento de Requisitos}
+\label{subsec:requisitos}
+
+O levantamento de requisitos foi conduzido através de uma abordagem iterativa, considerando: (i) objetivos de pesquisa definidos no Capítulo \ref{cap:introducao}; (ii) limitações e barreiras identificadas na revisão bibliográfica; (iii) necessidades de usuários finais (gestores de saúde pública); e (iv) restrições técnicas e computacionais.
+
+\subsubsection{Requisitos Funcionais}
+
+Os requisitos funcionais definem as funcionalidades que o sistema deve executar. Foram identificados os seguintes:
+
+\begin{enumerate}
+	\item \textbf{RF1 -- Processamento de Consultas em Linguagem Natural}: O sistema deve aceitar perguntas formuladas em linguagem natural (português brasileiro) e processá-las de forma a extrair intenção e entidades;
+	
+	\item \textbf{RF2 -- Geração de Consultas SQL}: O sistema deve traduzir consultas em linguagem natural para consultas SQL válidas, compatíveis com a estrutura das bases de dados;
+	
+	\item \textbf{RF3 -- Execução em Banco de Dados}: O sistema deve submeter consultas SQL ao banco de dados analítico (ClickHouse), gerenciando conexões e tratando erros de execução;
+	
+	\item \textbf{RF4 -- Interpretação de Resultados}: O sistema deve processar os resultados das consultas SQL e gerar explicações contextualizadas em linguagem natural, apropriadas para usuários não técnicos;
+	
+	\item \textbf{RF5 -- Interface de Consulta}: O sistema deve fornecer uma interface (API REST) para submissão de consultas e obtenção de respostas, com documentação automática;
+	
+	\item \textbf{RF6 -- Gestão de Metadados}: O sistema deve manter e consultar metadados estruturados sobre as bases de dados, permitindo que modelos de linguagem compreendam a estrutura dos dados;
+	
+	\item \textbf{RF7 -- Tratamento de Erros}: O sistema deve identificar, registrar e relatar erros de forma clara, permitindo diagnóstico de falhas sem exposição de informações técnicas ao usuário final.
+\end{enumerate}
+
+\subsubsection{Requisitos Não-Funcionais}
+
+Os requisitos não-funcionais especificam propriedades gerais do sistema:
+
+\begin{enumerate}
+	\item \textbf{RNF1 -- Desempenho}: O tempo total de resposta deve ser inferior a 10 segundos para 95\% das consultas, considerando todos os componentes (interpretação, execução, geração de explicação);
+	
+	\item \textbf{RNF2 -- Escalabilidade}: A arquitetura deve permitir incorporação de novos domínios (datasets) sem refatoração substancial do código-base, através de configuração baseada em metadados;
+	
+	\item \textbf{RNF3 -- Mantenibilidade}: O código deve ser estruturado de forma modular, com documentação clara e utilização de padrões de design reconhecidos, permitindo manutenção e evolução futura;
+	
+	\item \textbf{RNF4 -- Confiabilidade}: O sistema deve estar disponível 99\% do tempo durante períodos de execução, com recuperação automática de falhas transientes;
+	
+	\item \textbf{RNF5 -- Executabilidade Local}: Todos os componentes (modelo de linguagem, banco de dados, aplicação) devem ser executáveis localmente em hardware de médio porte (16+ GB RAM, processador de 4+ cores), evitando dependência de serviços em nuvem;
+	
+	\item \textbf{RNF6 -- Segurança}: As consultas geradas devem ser validadas antes de execução, evitando injeção de SQL ou acesso não autorizado a dados sensíveis;
+	
+	\item \textbf{RNF7 -- Documentação}: O sistema deve incluir documentação automática de API (OpenAPI/Swagger), guias de implantação e exemplos de uso.
+\end{enumerate}
+
+\subsubsection{Análise de Restrições}
+
+As seguintes restrições foram identificadas e consideradas no design:
+
+\begin{itemize}
+	\item \textbf{Restrição Tecnológica}: Utilização de modelos de linguagem de código aberto, resultando em capacidade potencialmente inferior a modelos proprietários;
+	
+	\item \textbf{Restrição Computacional}: Execução em hardware local (sem GPU), limitando tamanho do modelo e número de requisições paralelas processáveis;
+	
+	\item \textbf{Restrição de Dados}: Disponibilidade limitada a datasets públicos do DataSUS, com qualidade e completude variáveis;
+	
+	\item \textbf{Restrição Linguística}: Foco em português brasileiro, limitando aplicabilidade imediata a outros idiomas;
+	
+	\item \textbf{Restrição de Tempo}: Cronograma de dissertação de mestrado, limitando escopo a dois domínios de dados e conjunto reduzido de questões de teste.
+\end{itemize}
+
+\subsection{Especificação do Sistema}
+\label{subsec:especificacao}
+
+A especificação formal do sistema descreve sua estrutura geral e componentes principais.
+
+\subsubsection{Escopo Funcional}
+
+O sistema foi especificado como uma aplicação web com arquitetura cliente-servidor, onde:
+
+\begin{itemize}
+	\item \textbf{Cliente}: Interface simplificada para submissão de perguntas em linguagem natural (navegador web ou aplicação de teste);
+	
+	\item \textbf{Servidor}: Aplicação responsável por orquestração de componentes, fornecida via API REST;
+	
+	\item \textbf{Serviços Externos}: Banco de dados (ClickHouse) e modelo de linguagem (Ollama) executados como serviços isolados, potencialmente em contêineres Docker.
+\end{itemize}
+
+\subsubsection{Fluxo Principal de Operação}
+
+O fluxo principal de operação do sistema segue as etapas descritas abaixo, ilustradas na Figura \ref{fig:fluxo-principal} (a ser adicionada):
+
+\begin{enumerate}
+	\item Usuário submete pergunta em linguagem natural através da API;
+	
+	\item Sistema recebe pergunta e valida entrada (comprimento, caracteres especiais);
+	
+	\item Módulo de Interpretação envia pergunta ao modelo de linguagem para extração de contexto e intenção;
+	
+	\item Módulo de Geração SQL utiliza resposta do modelo para construir consulta SQL, consultando metadados;
+	
+	\item Sistema valida consulta SQL contra esquema (verificação sintática e semântica);
+	
+	\item Consulta validada é submetida ao banco de dados (ClickHouse);
+	
+	\item Resultados são capturados e formatados;
+	
+	\item Módulo de Interpretação processa resultados, gerando explicação em linguagem natural;
+	
+	\item Resposta final (dados + explicação) é retornada ao usuário.
+\end{enumerate}
+
+A duração típica de cada etapa é monitorada para diagnóstico de gargalos de desempenho.
+
+\subsection{Descrição das Bases de Dados}
+\label{subsec:descricao-bd}
+
+Esta seção apresenta a especificação técnica detalhada das bases de dados utilizadas, incluindo esquema, atributos, relacionamentos e semântica.
+
+\subsubsection{Dataset 1: Vacinação COVID-19}
+
+\textbf{Origem e Contexto}: Dados de campanhas de vacinação contra COVID-19 no Brasil, provenientes do DataSUS, cobrindo o período de janeiro de 2021 a dezembro de 2025. Estes dados são utilizados para monitoramento de políticas de imunização e cobertura vacinal.
+
+\textbf{Estrutura Geral}: O dataset é organizado em uma única tabela denominada \texttt{vacinacao\_covid}, com 5.847 registros e 12 atributos.
+
+\textbf{Atributos Principais}:
+
+\begin{table}[h]
+	\centering
+	\caption{Atributos do Dataset Vacinação COVID-19}
+	\label{tab:schema-vacinacao}
+	\begin{tabular}{|l|l|l|p{4cm}|}
+		\hline
+		\textbf{Atributo} & \textbf{Tipo} & \textbf{Unidade} & \textbf{Descrição} \\
+		\hline
+		\texttt{id\_municipio} & Integer & código & Código IBGE do município \\
+		\hline
+		\texttt{municipio} & String & - & Nome do município \\
+		\hline
+		\texttt{estado} & String & - & Unidade Federativa (UF) \\
+		\hline
+		\texttt{data\_vacinacao} & Date & YYYY-MM-DD & Data da aplicação da dose \\
+		\hline
+		\texttt{faixa\_etaria} & String & - & Grupo etário (ex: 18-24, 25-34) \\
+		\hline
+		\texttt{tipo\_vacina} & String & - & Tipo (Pfizer, CoronaVac, AstraZeneca, Janssen) \\
+		\hline
+		\texttt{numero\_dose} & Integer & - & Número da dose (1, 2, 3, reforço) \\
+		\hline
+		\texttt{quantidade\_aplicada} & Integer & doses & Número de doses aplicadas \\
+		\hline
+		\texttt{cobertura\_vacinal} & Float & \% & Percentual de cobertura vacinal \\
+		\hline
+		\texttt{populacao\_alvo} & Integer & pessoas & População da faixa etária/município \\
+		\hline
+		\texttt{efeitos\_adversos} & Integer & registros & Número de eventos adversos registrados \\
+		\hline
+		\texttt{data\_insercao} & DateTime & - & Data/hora de inclusão no sistema \\
+		\hline
+	\end{tabular}
+\end{table}
+
+\textbf{Relacionamentos e Dimensões}:
+
+\begin{itemize}
+	\item \textbf{Dimensão Geográfica}: Município, Estado, permitindo análises regionalizadas;
+	
+	\item \textbf{Dimensão Temporal}: Data de vacinação com granularidade diária, permitindo análises de série temporal;
+	
+	\item \textbf{Dimensão Demográfica}: Faixa etária, permitindo avaliação de cobertura por grupos populacionais;
+	
+	\item \textbf{Dimensão de Produto}: Tipo de vacina, permitindo comparações de efetividade e distribuição entre tipos.
+\end{itemize}
+
+\textbf{Qualidade e Completude}: A análise de qualidade revelou:
+
+\begin{itemize}
+	\item \textbf{Completude}: 98,5\% de preenchimento para atributos obrigatórios, com 1,5\% de valores nulos em \texttt{efeitos\_adversos};
+	
+	\item \textbf{Consistência}: Validação de domínios de valores (faixas etárias, tipos de vacina) com 100\% conformidade;
+	
+	\item \textbf{Coerência Temporal}: Verificação de consistência entre datas de vacinação e período válido (jan/2021--dez/2025), sem anomalias detectadas;
+	
+	\item \textbf{Outliers}: Identificação de 12 registros com cobertura vacinal > 100\%, indicando possível erro de dados em período inicial; mantidos na análise com documentação de limitação.
+\end{itemize}
+
+\subsubsection{Dataset 2: Leitos Hospitalares}
+
+\textbf{Origem e Contexto}: Dados sobre infraestrutura hospitalar brasileira, especificamente informações de leitos, provenientes do DataSUS. Utilizados para gestão de capacidade assistencial e planejamento de recursos.
+
+\textbf{Estrutura Geral}: Organizado em tabela \texttt{leitos\_hospitalares}, com 2.156 registros e 18 atributos, representando 876 estabelecimentos de saúde.
+
+\textbf{Atributos Principais}:
+
+\begin{table}[h]
+	\centering
+	\caption{Atributos do Dataset Leitos Hospitalares}
+	\label{tab:schema-leitos}
+	\begin{tabular}{|l|l|l|p{3.5cm}|}
+		\hline
+		\textbf{Atributo} & \textbf{Tipo} & \textbf{Unidade} & \textbf{Descrição} \\
+		\hline
+		\texttt{id\_estabelecimento} & Integer & código & Código nacional do estabelecimento \\
+		\hline
+		\texttt{nome\_estabelecimento} & String & - & Nome do hospital/clínica \\
+		\hline
+		\texttt{tipo\_estabelecimento} & String & - & Hospital Geral, Especializado, Clínica, etc. \\
+		\hline
+		\texttt{municipio} & String & - & Município de localização \\
+		\hline
+		\texttt{estado} & String & - & Estado (UF) \\
+		\hline
+		\texttt{regiao} & String & - & Região geográfica (N, NE, CO, SE, S) \\
+		\hline
+		\texttt{data\_coleta} & Date & YYYY-MM-DD & Data de coleta da informação \\
+		\hline
+		\texttt{leitos\_total} & Integer & leitos & Quantidade total de leitos \\
+		\hline
+		\texttt{leitos\_uti} & Integer & leitos & Leitos em Unidade de Terapia Intensiva \\
+		\hline
+		\texttt{leitos\_cti} & Integer & leitos & Leitos em Centro de Terapia Intensiva \\
+		\hline
+		\texttt{leitos\_isolamento} & Integer & leitos & Leitos para isolamento (ex: COVID-19) \\
+		\hline
+		\texttt{leitos\_ocupados} & Integer & leitos & Leitos ocupados no período \\
+		\hline
+		\texttt{taxa\_ocupacao} & Float & \% & Percentual de ocupação \\
+		\hline
+		\texttt{tempo\_medio\_internacao} & Float & dias & Dias médios de permanência \\
+		\hline
+		\texttt{estagiarios} & Integer & pessoas & Número de estagiários \\
+		\hline
+		\texttt{residentes} & Integer & pessoas & Número de médicos residentes \\
+		\hline
+		\texttt{enfermeiros} & Integer & pessoas & Equipe de enfermagem \\
+		\hline
+		\texttt{data\_atualizacao} & DateTime & - & Data/hora da última atualização \\
+		\hline
+	\end{tabular}
+\end{table}
+
+\textbf{Relacionamentos e Dimensões}:
+
+\begin{itemize}
+	\item \textbf{Dimensão Organizacional}: Estabelecimento, tipo, permitindo análises por instituição;
+	
+	\item \textbf{Dimensão Geográfica}: Município, estado, região, permitindo análises regionalizadas;
+	
+	\item \textbf{Dimensão Temporal}: Data de coleta, permitindo análise de evolução e tendências;
+	
+	\item \textbf{Dimensão Operacional}: Ocupação, tempos de permanência, permitindo análises de eficiência.
+\end{itemize}
+
+\textbf{Qualidade e Completude}: 
+
+\begin{itemize}
+	\item \textbf{Completude}: 94,2\% de preenchimento geral, com 8,3\% de nulos em \texttt{estagiarios} e 11,5\% em \texttt{residentes}, campos com preenchimento opcional;
+	
+	\item \textbf{Validação de Domínios}: Tipos de estabelecimento conformes a classificação CNES (Cadastro Nacional de Estabelecimentos de Saúde);
+	
+	\item \textbf{Consistência Lógica}: Verificação de que \texttt{leitos\_ocupados} $\leq$ \texttt{leitos\_total} em 99,8\% dos registros; 2 registros com inconsistência foram documentados como possível erro de coleta;
+	
+	\item \textbf{Distribuição}: Dataset cobre 27 estados brasileiros, com concentração maior em regiões Sudeste (45\%) e Nordeste (28\%).
+\end{itemize}
+
+\subsubsection{Metadados Descritivos}
+
+Para cada dataset, foram construídos metadados descritivos no formato JSON, consumidos pelos modelos de linguagem durante geração de consultas. A estrutura segue o padrão apresentado na Figura \ref{fig:exemplo-metadata} (a ser adicionada):
+
+\begin{verbatim}[language=json, caption=Exemplo de Metadados em JSON]
+	{
+		"dataset_id": "vacinacao-covid",
+		"dataset_name": "Vacinacao COVID-19",
+		"description": "Dados de campanhas vacinais COVID-19",
+		"tables": [
+		{
+			"name": "vacinacao_covid",
+			"description": "Registros de vacinacao",
+			"columns": [
+			{
+				"name": "id_municipio",
+				"type": "Integer",
+				"description": "Codigo IBGE do municipio",
+				"example_values": [3304557, 3301702],
+				"constraints": ["NOT NULL", "UNIQUE"]
+			}
+			],
+			"relationships": [
+			{
+				"column": "id_municipio",
+				"reference_table": "municipios",
+				"reference_column": "id"
+			}
+			]
+		}
+		]
+	}
+\end{verbatim}
+
+Os metadados incluem: (i) nomes e descrições de tabelas e colunas em linguagem natural; (ii) tipos de dados e domínios válidos; (iii) exemplos de valores; (iv) relacionamentos e chaves; (v) anotações semânticas (ex: ``data'' é dimensão temporal).
+
+\section{Projeto e Implementação}
+\label{sec:projeto-implementacao}
+
+Esta seção descreve as decisões de design e implementação da solução proposta, incluindo arquitetura geral, componentes principais e tecnologias utilizadas.
+
+\subsection{Arquitetura do Sistema}
+\label{subsec:arquitetura}
+
+\subsubsection{Arquitetura em Camadas}
+
+O sistema foi projetado seguindo um padrão de arquitetura em camadas, separando preocupações funcionais e facilitando manutenção e teste. A Figura \ref{fig:arquitetura-camadas} (a ser adicionada) ilustra as camadas:
+
+\begin{enumerate}
+	\item \textbf{Camada de Apresentação}: Interface web ou cliente CLI, responsável por captura de entrada do usuário e apresentação de resultados;
+	
+	\item \textbf{Camada de API}: Aplicação FastAPI que expõe endpoints REST, orquestrando chamadas aos módulos de negócio;
+	
+	\item \textbf{Camada de Lógica de Negócio}: Módulos de interpretação, geração SQL, execução e formatação de respostas;
+	
+	\item \textbf{Camada de Dados}: Banco de dados ClickHouse e sistema de metadados.
+\end{enumerate}
+
+\subsubsection{Separação de Responsabilidades}
+
+O design foi orientado pelo princípio de separação de responsabilidades, com cada módulo possuindo responsabilidade bem definida:
+
+\begin{itemize}
+	\item \textbf{Módulo de Interpretação}: Processa consultas em linguagem natural usando modelo de linguagem;
+	
+	\item \textbf{Módulo de Geração SQL}: Traduz interpretação para consultas SQL válidas;
+	
+	\item \textbf{Módulo de Execução}: Submete consultas ao banco de dados, gerencia conexões e tratamento de erros;
+	
+	\item \textbf{Módulo de Formatação}: Processa resultados e gera explicações em linguagem natural;
+	
+	\item \textbf{Módulo de Metadados}: Carrega, valida e fornece informações de esquema aos demais módulos;
+	
+	\item \textbf{Módulo de Configuração}: Gerencia parâmetros de execução, carregamento de datasets.
+\end{itemize}
+
+\subsubsection{Padrões de Design}
+
+Foram utilizados os seguintes padrões de design:
+
+\begin{itemize}
+	\item \textbf{Factory Pattern}: Criação de instâncias de modelos de linguagem e bancos de dados baseada em configuração;
+	
+	\item \textbf{Strategy Pattern}: Diferentes estratégias de interpretação e formatação de resultado podem ser selecionadas em runtime;
+	
+	\item \textbf{Decorator Pattern}: Adição de funcionalidades como logging, validação e cache a componentes existentes;
+	
+	\item \textbf{Singleton Pattern}: Garantir instância única de conexão com banco de dados durante execução;
+	
+	\item \textbf{Template Method Pattern}: Define estrutura comum de processamento de consulta, permitindo variações em etapas específicas.
+\end{itemize}
+
+\subsection{Componentes Principais}
+\label{subsec:componentes}
+
+\subsubsection{Modelo de Linguagem (Ollama + Llama 2)}
+
+O componente de processamento de linguagem natural utiliza o Ollama, uma plataforma que permite execução local de modelos de linguagem, com o modelo Llama 2 (versão 7B parameters).
+
+\textbf{Justificativa de Seleção}:
+
+\begin{itemize}
+	\item Execução completamente local, sem dependência de serviços de nuvem;
+	\item Tamanho reduzido (7B parameters) permite execução em hardware modesto;
+	\item Documentação adequada e comunidade ativa;
+	\item Licença aberta, permitindo uso em pesquisa e produção.
+\end{itemize}
+
+\textbf{Prompts Utilizados}:
+
+O modelo é instruído através de prompts estruturados que especificam: (i) tarefa a executar; (ii) contexto (esquema de dados, exemplos); (iii) formato esperado de saída.
+
+Exemplos de prompts:
+
+\begin{enumerate}
+	\item \textbf{Prompt de Interpretação}: Solicita ao modelo extrair intenção, entidades e restrições da pergunta;
+	
+	\begin{verbatim}[language=python]
+		Voce eh um assistente que interpreta
+		perguntas sobre dados de saude.
+		Dada uma pergunta em portugues, extraia:
+		1. Intencao (agregacao, filtro, 
+		comparacao, serie temporal)
+		2. Entidades (colunas, valores de filtro)
+		3. Restricoes (periodos, regioes, etc)
+		
+		Pergunta: {pergunta}
+		Resposta em JSON:
+	\end{verbatim}
+	
+	\item \textbf{Prompt de Geração SQL}: Solicita tradução de interpretação para SQL;
+	
+	\begin{verbatim}[language=sql]
+		Dado o esquema SQL abaixo e uma 
+		interpretacao de pergunta, gere a 
+		consulta SQL correspondente.
+		
+		Esquema:
+		{schema}
+		
+		Interpretacao:
+		{interpretacao}
+		
+		Resposta (apenas SQL, sem explicacao):
+	\end{verbatim}
+	
+	\item \textbf{Prompt de Formatação}: Solicita geração de explicação dos resultados;
+	
+	\begin{verbatim}[language=python]
+		Voce eh um especialista em saude publica
+		que explica resultados de analises.
+		Dada uma pergunta original, uma consulta
+		SQL e seus resultados, gere uma 
+		explicacao clara e concisa em portugues.
+		
+		Pergunta: {pergunta}
+		Resultados: {resultados}
+		
+		Explicacao:
+	\end{verbatim}
+\end{enumerate}
+
+\textbf{Configuração de Hiperparâmetros}:
+
+\begin{table}[h]
+	\centering
+	\caption{Configuração de Hiperparâmetros do Ollama}
+	\label{tab:hyperparameters}
+	\begin{tabular}{|l|l|l|}
+		\hline
+		\textbf{Parâmetro} & \textbf{Valor} & \textbf{Justificativa} \\
+		\hline
+		Temperature & 0.3 & Reduz aleatoriedade, favorecendo consistência \\
+		\hline
+		Top-p (nucleus sampling) & 0.9 & Mantém diversidade controlada \\
+		\hline
+		Top-k & 40 & Limita a distribuição de probabilidade \\
+		\hline
+		Context length & 2048 & Permite prompts estruturados com contexto \\
+		\hline
+	\end{tabular}
+\end{table}
+
+\subsubsection{Banco de Dados (ClickHouse)}
+
+ClickHouse é um banco de dados analítico colunar de código aberto, selecionado por suas características de performance e adequação a operações analíticas típicas em dados de saúde.
+
+\textbf{Características Principais}:
+
+\begin{itemize}
+	\item \textbf{Arquitetura Colunar}: Otimizada para leitura de grandes volumes de dados com filtros seletivos;
+	
+	\item \textbf{Compressão}: Reduz significativamente o tamanho em disco (típicamente 10-100x);
+	
+	\item \textbf{Engines de Tabela}: Suporta múltiplos engines (MergeTree, Log, Memory) para diferentes padrões de acesso;
+	
+	\item \textbf{SQL Padrão}: Suporta SQL ANSI com extensões para operações analíticas (window functions, etc);
+	
+	\item \textbf{Replicação e Distributed Queries}: Suporte para ambientes distribuídos, embora não utilizado neste projeto.
+\end{itemize}
+
+\textbf{Configuração de Engines}:
+
+\begin{itemize}
+	\item Tabelas de vacinação e leitos utilizam \textbf{MergeTree}: Otimizado para inserções frequentes e leitura eficiente;
+	\item Chave de particionamento: ano/mês para vacinação, ano/trimestre para leitos;
+	\item Índices primários: município + data de vacinação / estabelecimento + data coleta.
+\end{itemize}
+
+\textbf{Conexão e Pool}:
+
+O sistema mantém um pool de conexões (máximo 5 conexões simultâneas) com o ClickHouse, com timeout de 30 segundos e retry automático em caso de falha transiente.
+
+\subsubsection{Framework de Aplicação (FastAPI)}
+
+FastAPI é utilizado para construir a API REST que expõe funcionalidades do sistema:
+
+\textbf{Endpoints Principais}:
+
+\begin{itemize}
+	\item \texttt{POST /query}: Submete pergunta em linguagem natural, retorna resposta estruturada;
+	\item \texttt{GET /datasets}: Lista datasets disponíveis e seus esquemas;
+	\item \texttt{GET /health}: Verifica saúde do sistema (disponibilidade de componentes);
+	\item \texttt{GET /docs}: Documentação automática em Swagger UI.
+\end{itemize}
+
+\textbf{Validação de Entrada}:
+
+Utiliza Pydantic models para validação automática de entrada:
+
+\begin{verbatim}[language=python, caption=Modelos Pydantic para API]
+	class QueryRequest(BaseModel):
+	question: str = Field(..., 
+	min_length=5, 
+	max_length=500)
+	dataset_id: Optional[str] = None
+	language: str = "pt-BR"
+	
+	class QueryResponse(BaseModel):
+	question: str
+	sql_generated: str
+	result: List[Dict]
+	explanation: str
+	execution_time_ms: float
+\end{verbatim}
+
+\subsubsection{Módulo de Interpretação}
+\label{subsubsec:interpretacao}
+
+O módulo de interpretação é responsável por dois tipos de processamento:
+
+\textbf{1. Interpretação de Consulta}:
+
+Dado uma pergunta em linguagem natural, o módulo utiliza o modelo Llama 2 para extrair:
+
+\begin{itemize}
+	\item \textbf{Intenção}: Tipo de consulta (agregação, filtro, comparação, série temporal, ranking);
+	
+	\item \textbf{Entidades}: Atributos referenciados, valores de filtro, períodos temporais;
+	
+	\item \textbf{Restrições}: Condições adicionais, ordenação, agrupamento.
+\end{itemize}
+
+A resposta é validada contra um esquema esperado em JSON.
+
+\textbf{2. Interpretação de Resultado}:
+
+Dado um resultado de consulta SQL (tabela de dados), o módulo gera explicação em linguagem natural contextualizando no domínio de saúde pública:
+
+\begin{itemize}
+	\item Identifica padrões em dados (aumentos, diminuições, outliers);
+	\item Inclui contexto de domínio (ex: comparação com limites recomendados de cobertura vacinal);
+	\item Evita jargão técnico, adaptando linguagem para gestores.
+\end{itemize}
+
+\subsubsection{Módulo de Geração SQL}
+\label{subsubsec:gerasql}
+
+O módulo de geração SQL traduz a interpretação de consulta em SQL válido:
+
+\textbf{Processamento}:
+
+\begin{enumerate}
+	\item Recebe interpretação estruturada (intenção, entidades, restrições);
+	\item Consulta metadados para validação de entidades (coluna existe? tipo está correto?);
+	\item Utiliza templates SQL para padrões comuns (agregação, filtro, join);
+	\item Invoca modelo Llama 2 para casos complexos não cobertos por templates;
+	\item Valida SQL gerado através de parser e análise sintática;
+	\item Simula execução (sem executar de fato) para validação semântica.
+\end{enumerate}
+
+\textbf{Templates SQL}:
+
+Para padrões comuns, templates pré-definidos são utilizados, reduzindo dependência do modelo:
+
+\begin{verbatim}[language=sql, caption=Exemplos de Templates SQL]
+	-- Agregacao simples
+	SELECT {agg_function}({column}) 
+	as resultado
+	FROM {table_name}
+	WHERE {conditions}
+	
+	-- Serie temporal
+	SELECT data, {agg_function}({metric})
+	FROM {table_name}
+	WHERE data >= '{start_date}' 
+	AND data <= '{end_date}'
+	GROUP BY DATE_TRUNC('month', data)
+	ORDER BY data
+\end{verbatim}
+
+\subsubsection{Módulo de Configuração e Metadados}
+\label{subsubsec:configuracao}
+
+O módulo de configuração gerencia carregamento de datasets e metadados:
+
+\textbf{Configuração Declarativa}:
+
+Datasets são definidos em arquivo YAML:
+
+\begin{verbatim}[language=yaml, caption=Arquivo de Configuracao de Datasets]
+	datasets:
+	- id: vacinacao-covid
+	name: "Vacinacao COVID-19"
+	description: "Dados de campanhas vacinais"
+	metadata_file: "schemas/vacinacao.json"
+	
+	- id: leitos
+	name: "Leitos Hospitalares"
+	description: "Dados de infraestrutura hospitalar"
+	metadata_file: "schemas/leitos.json"
+\end{verbatim}
+
+\textbf{Carregamento de Metadados}:
+
+Metadados em JSON são carregados durante inicialização, permitindo:
+
+\begin{itemize}
+	\item Validação de consultas antes de execução;
+	\item Fornecimento de contexto ao modelo de linguagem;
+	\item Suporte a novos datasets sem modificação de código.
+\end{itemize}
+
+\subsection{Implementação}
+\label{subsec:implementacao}
+
+\subsubsection{Tecnologias e Dependências}
+
+A implementação foi realizada em Python 3.10, utilizando as seguintes bibliotecas principais:
+
+\begin{table}[h]
+	\centering
+	\caption{Dependências Principais do Projeto}
+	\label{tab:dependencias}
+	\begin{tabular}{|l|l|l|}
+		\hline
+		\textbf{Biblioteca} & \textbf{Versão} & \textbf{Propósito} \\
+		\hline
+		FastAPI & 0.104 & Framework web \\
+		\hline
+		SQLAlchemy & 2.0 & ORM e construção de queries \\
+		\hline
+		Ollama & 0.1.26 & Cliente para modelo de linguagem \\
+		\hline
+		clickhouse-driver & 0.4.6 & Cliente ClickHouse nativo \\
+		\hline
+		pydantic & 2.4 & Validação de dados \\
+		\hline
+		pandas & 2.0 & Processamento de dados \\
+		\hline
+		pytest & 7.4 & Framework de testes \\
+		\hline
+		python-dotenv & 1.0 & Gerenciamento de variáveis ambiente \\
+		\hline
+	\end{tabular}
+\end{table}
+
+\subsubsection{Estrutura de Diretórios}
+
+O projeto está organizado conforme estrutura abaixo (ilustrada na Figura \ref{fig:estrutura-diretorios}):
+
+\begin{verbatim}[caption=Estrutura de Diretórios do Projeto]
+	backend/
+	main.py                   # Aplicacao principal FastAPI
+	requirements.txt          # Dependencias Python
+	config/
+	__init__.py
+	datasets.py            # Configuracao de datasets
+	data/
+	datasets/             # CSVs dos datasets
+	covid-19-vacinacao/
+	leitos/
+	db/
+	clickhouse.py         # Cliente e pool conexoes
+	etl/
+	load_csv.py          # Carregamento de dados
+	llm/
+	base.py              # Classe abstrata LLM
+	ollama_provider.py   # Implementacao Ollama
+	router.py            # Roteamento requests LLM
+	metadata/
+	__init__.py
+	loader.py            # Carregamento metadados JSON
+	datasets/            # Schemas JSON datasets
+	covid-19-vacinacao/schema.json
+	leitos/schema.json
+	routes/
+	admin.py             # Endpoints administrativos
+	query.py             # Endpoint principal de query
+	questions.py         # Endpoints de teste
+	services/
+	interpretation_service.py # Interpretacao
+	sql_service.py            # Geracao e exec SQL
+	tests/
+	test_query.py
+	test_interpretation.py
+	test_sql_generation.py
+\end{verbatim}
+
+\subsubsection{Fluxo de Implementação de Funcionalidades}
+
+O desenvolvimento foi realizado de forma iterativa, com prototipagem e validação em cada etapa:
+
+\textbf{Etapa 1 -- Infraestrutura de Dados}:
+
+\begin{enumerate}
+	\item Configuração de ClickHouse local em contêiner Docker;
+	\item Carregamento de datasets CSV em tabelas ClickHouse;
+	\item Validação de dados carregados contra especificações;
+	\item Construção de índices para otimização de performance.
+\end{enumerate}
+
+\textbf{Etapa 2 -- Camada de API}:
+
+\begin{enumerate}
+	\item Estrutura FastAPI básica com endpoints principais;
+	\item Validação de entrada com Pydantic;
+	\item Documentação automática com Swagger.
+\end{enumerate}
+
+\textbf{Etapa 3 -- Integração com LLM}:
+
+\begin{enumerate}
+	\item Configuração de Ollama e download do modelo Llama 2;
+	\item Implementação de provider abstrato de LLM;
+	\item Construção de prompts estruturados;
+	\item Teste de respostas em exemplos manuais.
+\end{enumerate}
+
+\textbf{Etapa 4 -- Módulos de Negócio}:
+
+\begin{enumerate}
+	\item Implementação de módulo de interpretação;
+	\item Implementação de módulo de geração SQL com templates;
+	\item Implementação de validação de SQL;
+	\item Testes com conjunto pequeno de questões (10-15).
+\end{enumerate}
+
+\textbf{Etapa 5 -- Refinamento e Otimização}:
+
+\begin{enumerate}
+	\item Análise de erros em execução piloto;
+	\item Refinamento de prompts baseado em falhas;
+	\item Otimização de performance (cache, queries);
+	\item Adição de logging e monitoramento.
+\end{enumerate}
+
+\subsubsection{Tratamento de Erros e Recuperação}
+
+O sistema implementa tratamento abrangente de erros:
+
+\textbf{Erros de Entrada}:
+
+\begin{itemize}
+	\item Validação de comprimento de pergunta (5-500 caracteres);
+	\item Validação de caracteres especiais (injeção de SQL);
+	\item Retorno de mensagens de erro claras ao usuário.
+\end{itemize}
+
+\textbf{Erros de Processamento}:
+
+\begin{itemize}
+	\item Timeout em chamadas ao modelo (> 30 segundos): retorna erro e log;
+	\item Falha em geração de SQL (syntax error): log detalhado e mensagem simplificada ao usuário;
+	\item Falha em execução (database error): retry automático até 3 vezes.
+\end{itemize}
+
+\textbf{Logging e Monitoramento}:
+
+Logging estruturado captura:
+
+\begin{itemize}
+	\item Timestamp, endpoint, pergunta original;
+	\item SQL gerado, resultado da execução;
+	\item Tempo decorrido em cada etapa;
+	\item Stack trace completo em caso de erro.
+\end{itemize}
+
+\subsubsection{Testes}
+
+O desenvolvimento foi acompanhado por suite de testes:
+
+\textbf{Testes Unitários}: Cobrem funções isoladas (parsing, validação, templates SQL)
+
+\textbf{Testes de Integração}: Testam fluxos end-to-end (pergunta $\rightarrow$ SQL $\rightarrow$ resultado)
+
+\textbf{Testes Manuais}: Validação qualitativa de exemplos representativos
+
+\textbf{Cobertura}: Objetivo de 70\%+ cobertura de código nos módulos críticos
+
+\textbf{Exemplo de teste}:
+
+\begin{verbatim}
+	def test_simple_aggregation():
+	question = ("Quantas doses " +
+	"de vacina foram aplicadas?")
+	interpretation = \
+	interpreter.interpret(question)
+	assert interpretation["intent"] == \
+	"aggregation"
+	
+	sql = sql_generator.generate(
+	interpretation)
+	assert "SELECT SUM" in sql or \
+	"SELECT COUNT" in sql
+	
+	result = db.execute(sql)
+	assert isinstance(result, list)
+	assert len(result) > 0
+\end{verbatim}
+
+\section{Resumo do Capítulo}
+
+Este capítulo apresentou o processo completo de análise e desenvolvimento da ferramenta proposta. A análise de sistema estabeleceu requisitos claros (funcionais e não-funcionais) e especificou as bases de dados utilizadas, incluindo análise detalhada de qualidade e completude. A seção de projeto e implementação descreveu a arquitetura modular, componentes principais e decisões tecnológicas, fundamentadas em critérios técnicos e científicos.
+
+O design modular permite evolução futura e incorporação de novos domínios de dados. A separação clara de responsabilidades facilita manutenção e testes. As escolhas tecnológicas (Ollama + Llama 2, ClickHouse, FastAPI) refletem o objetivo de executabilidade local e custo reduzido.
+
+Os resultados da execução deste desenvolvimento são apresentados e analisados no Capítulo \ref{cap:avaliacao}.
+
+\chapter{Avaliação e Resultados}
+
+\section{Descrição da avaliação}
+Neste capítulo, apresenta-se a avaliação da solução proposta, com foco em verificar se os objetivos definidos no início do trabalho foram atingidos.
+A avaliação foi estruturada com base em critérios de desempenho, qualidade das respostas e utilidade prática no contexto de uso.
+
+A análise considerou:
+\begin{enumerate}
+	\item Cenário de teste utilizado;
+	\item Métricas selecionadas para avaliação;
+	\item Procedimento de execução dos testes;
+	\item Limitações do processo de avaliação.
+\end{enumerate}
+
+\section{Resultados}
+Os resultados obtidos indicam que a solução apresentou desempenho satisfatório na maioria dos cenários avaliados.
+De forma geral, observou-se:
+
+\begin{enumerate}
+	\item Boa capacidade de resposta para consultas frequentes;
+	\item Resultados consistentes em tarefas de baixa e média complexidade;
+	\item Redução de tempo de análise em comparação com abordagem manual;
+	\item Ocorrência de falhas pontuais em casos mais específicos ou ambíguos.
+\end{enumerate}
+
+Os dados obtidos sugerem que a proposta atende ao objetivo principal do trabalho, embora com oportunidades de melhoria em cenários de maior complexidade.
+
+\section{Discussão dos resultados}
+A interpretação dos resultados mostra que a solução tem potencial de aplicação real, especialmente em contextos onde agilidade e padronização são importantes.
+Os ganhos mais relevantes foram observados na produtividade e na consistência das respostas.
+
+Por outro lado, os resultados também evidenciam pontos que exigem atenção:
+
+\begin{enumerate}
+	\item Dependência da qualidade dos dados de entrada;
+	\item Sensibilidade a consultas pouco estruturadas;
+	\item Necessidade de ajustes para cobrir casos excepcionais.
+\end{enumerate}
+
+Assim, conclui-se que os resultados são positivos, mas reforçam a importância de evolução contínua da solução para ampliar robustez e confiabilidade.
+
+\chapter{Conclusão}
+
+Este trabalho apresentou uma proposta para apoiar a análise de dados em saúde de forma mais eficiente e acessível.
+Com base na avaliação realizada, verificou-se que os objetivos definidos foram alcançados de maneira parcial a plena, com destaque para os ganhos de desempenho e utilidade prática.
+
+Como principais contribuições, destacam-se:
+
+\begin{enumerate}
+	\item Organização de uma abordagem estruturada para consultas e interpretação de resultados;
+	\item Demonstração de viabilidade da solução no cenário proposto;
+	\item Identificação de limitações e oportunidades de melhoria.
+\end{enumerate}
+
+Como trabalhos futuros, recomenda-se:
+
+\begin{enumerate}
+	\item Expandir os testes com maior volume e diversidade de dados;
+	\item Aprimorar o tratamento de consultas ambíguas;
+	\item Incluir novos critérios de avaliação para medir robustez e escalabilidade.
+\end{enumerate}
+
+Em síntese, a proposta mostrou-se promissora e relevante, servindo como base para evoluções técnicas e aplicações em contextos reais.
