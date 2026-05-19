@@ -7,7 +7,8 @@ from typing import Optional
 from services.sql_service import generate_sql
 from db.clickhouse import run_query
 from services.interpretation_service import interpret_result
-from metadata.loader import load_metadata
+from metadata.loader import load_metadata, get_available_datasets, get_metadata_by_dataset
+from config.datasets import DATASETS_CONFIG
 
 logger = logging.getLogger(__name__)
 
@@ -91,7 +92,9 @@ def is_valid_sql(sql: str, dataset: str = "covid-19-vacinacao") -> bool:
     # Mapear dataset → tabela esperada
     dataset_table_map = {
         "covid-19-vacinacao": "vacinacao",
-        "leitos": "leitos"
+        "leitos": "leitos",
+        "surtos-srag": "srag",
+        "atencao-basica": "atencao_basica"
     }
     
     expected_table = dataset_table_map.get(dataset, "vacinacao")
@@ -264,6 +267,12 @@ def _detect_dataset_for_question(question: str) -> Optional[str]:
     
     Usa heurísticas simples de palavras-chave.
     Retorna None se nenhum dataset for detectado com confiança.
+    
+    Datasets suportados:
+    - covid-19-vacinacao: Campanha Nacional de Vacinação COVID-19
+    - leitos: Dados de leitos hospitalares
+    - surtos-srag: Síndrome Respiratória Aguda Grave
+    - atencao-basica: Unidades Básicas de Saúde (UBS)
     """
     question_lower = question.lower()
     
@@ -277,6 +286,16 @@ def _detect_dataset_for_question(question: str) -> Optional[str]:
             "leito", "leitos", "hospital", "uti", "capacidade", "cama",
             "camas", "internação", "estabelecimento", "saúde", "clínica",
             "pronto forro", "pronto-forro", "ocupação", "disponível"
+        ],
+        "surtos-srag": [
+            "srag", "síndrome respiratória", "respiratória aguda", "febre",
+            "tosse", "dispneia", "falta de ar", "vigilância epidemiológica",
+            "notificação", "sintoma", "sintomas", "grave", "hospitalizado"
+        ],
+        "atencao-basica": [
+            "ubs", "básica", "unidade básica", "saúde", "posto de saúde",
+            "atenção primária", "cnes", "endereço", "localização", "bairro",
+            "coordenadas", "geolocalização"
         ]
     }
     

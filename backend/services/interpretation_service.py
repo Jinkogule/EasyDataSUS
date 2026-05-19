@@ -9,6 +9,191 @@ from config.datasets import get_dataset_config
 logger = logging.getLogger(__name__)
 
 
+# ============================================================================
+# DETECÇÃO DE TIPO DE RESULTADO BASEADA NA PERGUNTA (NÃO NO RESULTADO)
+# ============================================================================
+
+def _detect_result_type_from_question(question: str) -> str:
+    """
+    Detecta o tipo de resultado esperado baseado em keywords na PERGUNTA.
+    Isso é muito mais confiável que tentar detectar pelo resultado em si.
+    
+    Tipos retornados:
+    - "simple": Pergunta por um número único (COUNT, SUM, AVG)
+    - "distribution": Pergunta por distribuição/proporção entre categorias
+    - "ranking": Pergunta por qual X é maior/menor, ranking de
+    - "temporal": Pergunta por evolução/tendência ao longo do tempo
+    - "ratio": Pergunta por proporção/razão entre duas métricas
+    - "multi_dimension": Pergunta cruzada (múltiplas dimensões)
+    - "unknown": Não conseguiu detectar padrão claro
+    
+    Args:
+        question: Pergunta original do usuário em português
+    
+    Returns:
+        String com tipo detectado
+    """
+    q_lower = question.lower()
+    
+    # Padrão 1: PROPORÇÃO / RAZÃO
+    if any(pattern in q_lower for pattern in [
+        'proporção', 'razao', 'razão', 'por cento', 'percentual', 'percentagem',
+        '/', 'em relacao', 'relação', 'comparado com', 'versus', 'vs'
+    ]):
+        return "ratio"
+    
+    # Padrão 2: DISTRIBUIÇÃO
+    if any(pattern in q_lower for pattern in [
+        'distribuição', 'distribuicao', 'como foi', 'qual é a distribuição',
+        'de cada', 'entre', 'por sexo', 'por estado', 'por tipo', 'por faixa',
+        'entre diferentes'
+    ]):
+        return "distribution"
+    
+    # Padrão 3: RANKING / COMPARAÇÃO
+    if any(pattern in q_lower for pattern in [
+        'qual estado', 'qual município', 'qual tipo', 'qual fabricante',
+        'qual estabelecimento', 'ranking', 'maior número', 'menor número',
+        'maior capacidade', 'qual teve mais', 'qual teve menos',
+        'qual possui', 'que mais', 'que menos', 'líder', 'top'
+    ]):
+        return "ranking"
+    
+    # Padrão 4: TEMPORAL / SÉRIE DE TEMPO
+    if any(pattern in q_lower for pattern in [
+        'evolução', 'ao longo', 'ao longo do', 'tendência', 'ao decorrer',
+        'mensal', 'anual', 'por mês', 'por ano', 'por período',
+        'qual mês', 'qual ano', 'qual trimestre', 'qual semana',
+        'ao longo', 'série', 'história', 'histórico'
+    ]):
+        return "temporal"
+    
+    # Padrão 5: MULTI-DIMENSÃO (análise cruzada)
+    if any(pattern in q_lower for pattern in [
+        'em cada estado', 'de cada estado', 'por estado e', 'em cada',
+        'de cada', 'cruzada', 'entre diferentes dimensões',
+        'em hospitais gerais públicos'
+    ]):
+        return "multi_dimension"
+    
+    # Padrão 6: SIMPLES (quantidade total, SUM, AVG)
+    if any(pattern in q_lower for pattern in [
+        'quantas', 'quantos', 'qual é o total', 'qual é a quantidade',
+        'qual é a capacidade', 'qual é a média', 'total de', 'soma de',
+        'no total', 'em total'
+    ]):
+        # Se não matchou distribuição ou ranking, é simples
+        return "simple"
+    
+    return "unknown"
+
+
+def _get_type_specific_context(result_type: str, question: str, result: list) -> str:
+    """
+    Retorna instrução específica por tipo de resultado.
+    
+    Args:
+        result_type: Tipo detectado
+        question: Pergunta original
+        result: Resultado do SQL
+    
+    Returns:
+        String com instruções para o LLM
+    """
+    
+    result_count = len(result) if isinstance(result, list) else 0
+    
+    # Detectar se há número único
+    is_single_number = (
+        result_count == 1 and 
+        isinstance(result[0], (list, tuple)) and 
+        len(result[0]) == 1
+    )
+    
+    if result_type == "simple":
+        if is_single_number:
+            number = result[0][0]
+            return f"""TIPO DE RESULTADO: Número Único
+O resultado é um valor ÚNICO que responde diretamente à pergunta.
+Você recebeu: {number}
+
+INSTRUÇÕES:
+1. Responda de forma direta e simples, usando EXATAMENTE o número {number}
+2. Formule em linguagem natural uma frase que responda à pergunta
+3. PROIBIDO gerar SQL, código ou contextos fictícios
+4. Exemplos corretos:
+   - Pergunta: "Quantas doses foram aplicadas?"
+   - Resposta: "Foram aplicadas 390.911 doses de vacina COVID-19 no Brasil."
+5. Uma frase. Ponto final. Fim."""
+        else:
+            return """TIPO DE RESULTADO: Valor Agregado
+O resultado é um cálculo único (soma, média, contagem) que responde à pergunta.
+Use o valor recebido como resposta principal, sem adicionar contextos fictícios."""
+    
+    elif result_type == "distribution":
+        return f"""TIPO DE RESULTADO: Distribuição
+O resultado mostra como algo se distribui entre {result_count} categorias.
+
+INSTRUÇÕES:
+1. Mencione TODAS as categorias e seus valores
+2. Se há proporções, calcule/mencione os percentuais
+3. Identifique qual é a maior e qual é a menor
+4. Descrição clara e objetiva
+5. Exemplo: "A distribuição foi Feminino 210.133 (53,8%) e Masculino 180.115 (46,2%)"
+6. Máximo 2-3 frases."""
+    
+    elif result_type == "ranking":
+        first_place = result[0][0] if result and len(result[0]) > 0 else "???"
+        return f"""TIPO DE RESULTADO: Ranking
+O resultado é um ranking ordenado de entidades.
+Primeiro lugar: {first_place}
+
+INSTRUÇÕES:
+1. Identifique e destaque quem está em PRIMEIRO lugar
+2. Mencione o valor/número associado
+3. Opcionalmente mencione o segundo lugar para contexto
+4. Use frases como "lidera com", "em primeiro lugar", "maior de"
+5. Exemplo: "São Paulo lidera com 156.000 doses, seguido por Minas Gerais com 89.000"
+6. Máximo 2 frases."""
+    
+    elif result_type == "temporal":
+        return f"""TIPO DE RESULTADO: Série Temporal
+O resultado mostra evolução ao longo do tempo com {result_count} períodos.
+
+INSTRUÇÕES:
+1. Identifique o PICO (maior valor) e quando ocorreu
+2. Descreva a TENDÊNCIA (crescimento, queda, estável)
+3. Mencione o período com menor atividade se relevante
+4. Exemplo: "Vacinações aumentaram de janeiro a junho de 2021, com pico em junho com 52.400 doses"
+5. Máximo 2-3 frases."""
+    
+    elif result_type == "ratio":
+        return f"""TIPO DE RESULTADO: Proporção/Razão
+O resultado é uma razão ou proporção entre duas métricas.
+
+INSTRUÇÕES:
+1. Apresente a proporção de forma clara (X% ou Y:Z ou "X de cada Z")
+2. Se há valores absolutos, mencione-os também
+3. Contextualizar o que significado (maior/menor cobertura, maior/menor acesso)
+4. Exemplo: "65% dos leitos (156.000 de 240.000) estão sob gestão SUS"
+5. Máximo 2 frases."""
+    
+    elif result_type == "multi_dimension":
+        return f"""TIPO DE RESULTADO: Análise Multi-dimensão
+O resultado cruza múltiplas dimensões ({result_count} linhas com múltiplas colunas).
+
+INSTRUÇÕES:
+1. Identifique qual combinação tem o maior valor
+2. Descreva o padrão geral (qual estado lidera, qual tipo é mais comum, etc)
+3. Mencione disparidades importantes se existirem
+4. Exemplo: "SP lidera com 156.000 doses em Hospitais Gerais, seguido por MG com 89.000 em Postos"
+5. Máximo 3 frases."""
+    
+    else:  # "unknown"
+        return """TIPO DE RESULTADO: Desconhecido
+Não consegui identificar o padrão, então use sua melhor interpretação do resultado."""
+
+
 class DateTimeEncoder(json.JSONEncoder):
     """JSON encoder customizado para lidar com objetos de data e hora"""
     def default(self, obj):
@@ -106,10 +291,10 @@ def _format_result_for_llm(result: list, max_rows: int = 50) -> str:
 
 def interpret_result(question: str, result, model_name: str = "deepseek-local", dataset: str = "covid-19-vacinacao") -> str:
     """
-    Interpreta resultado usando LLM com abordagem simplista e flexível.
+    Interpreta resultado usando LLM com abordagem TIPO-ESPECÍFICA.
     
-    Não tenta detectar tipo de resultado - apenas passa pergunta + dados + contexto
-    para o LLM interpretar naturalmente.
+    Detecta o tipo de pergunta (simples, distribuição, ranking, temporal, etc)
+    e passa instruções específicas ao LLM para evitar alucinação.
     
     Args:
         question: Pergunta original do usuário
@@ -137,21 +322,27 @@ def interpret_result(question: str, result, model_name: str = "deepseek-local", 
     try:
         llm = get_llm(model_name)
         
+        # NOVO: Detectar tipo baseado na pergunta (não no resultado!)
+        result_type = _detect_result_type_from_question(question)
+        logger.debug(f"Tipo de resultado detectado: {result_type}")
+        
         # Obter contexto do dataset
         dataset_context = _get_dataset_context(dataset)
         
         # Formatar resultado para apresentar ao LLM
         formatted_result = _format_result_for_llm(result, max_rows=100)
         
-        # Gerar prompt simples que deixa LLM interpretar
+        # NOVO: Passar tipo e resultado para _build_interpretation_prompt
         prompt = _build_interpretation_prompt(
             question=question,
             result_data=formatted_result,
             result_count=len(result),
-            dataset_context=dataset_context
+            dataset_context=dataset_context,
+            result_type=result_type,
+            result=result
         )
         
-        logger.debug(f"Enviando para LLM {model_name} com {len(result)} linhas de resultado")
+        logger.debug(f"Enviando para LLM {model_name} com {len(result)} linhas de resultado (tipo: {result_type})")
         
         # Obter resposta do LLM
         response = llm.generate(prompt)
@@ -161,7 +352,7 @@ def interpret_result(question: str, result, model_name: str = "deepseek-local", 
             return _fallback_interpretation(result, question)
         
         interpretation = response.strip()
-        logger.info(f"Interpretação gerada com sucesso: {len(interpretation)} caracteres")
+        logger.info(f"Interpretação gerada com sucesso: {len(interpretation)} caracteres (tipo: {result_type})")
         
         return interpretation
     
@@ -173,50 +364,135 @@ def interpret_result(question: str, result, model_name: str = "deepseek-local", 
         return _fallback_interpretation(result, question)
 
 
-def _build_interpretation_prompt(question: str, result_data: str, result_count: int, dataset_context: str) -> str:
+def _build_interpretation_prompt(question: str, result_data: str, result_count: int, dataset_context: str, result_type: str = "unknown", result: list = None) -> str:
     """
-    Constrói prompt simples e flexível para o LLM interpretar resultado.
-    Zero hardcoding - deixa o LLM decidir como interpretar.
+    Constrói prompt MUITO SIMPLES e direto para o LLM interpretar resultado.
+    
+    DeepSeek Coder funciona melhor com prompts curtos e diretos, sem muita formatação.
     
     Args:
         question: Pergunta do usuário
         result_data: Dados formatados para exibição
         result_count: Total de linhas no resultado
         dataset_context: Contexto sobre o dataset
+        result_type: Tipo detectado pela pergunta
+        result: Resultado bruto (para casos especiais)
     
     Returns:
-        Prompt estruturado para o LLM
+        Prompt estruturado mas simples
     """
     
-    return f"""Você é um assistente de análise de dados de saúde pública no Brasil.
-Sua tarefa é interpretar e explicar resultados de consultas de forma clara e prática para gestor.
+    # Detectar se é um número único
+    is_single_number = (
+        result_count == 1 and 
+        result and isinstance(result[0], (list, tuple)) and 
+        len(result[0]) == 1
+    )
+    
+    # ESTRATÉGIA: Prompts separados e MUITO simples por tipo
+    
+    if is_single_number and result_type == "simple":
+        # Para números únicos: prompt EXTREMAMENTE simples
+        number = result[0][0]
+        return f"""Pergunta: {question}
 
-{dataset_context}
+Resultado do banco de dados: {number}
 
-PERGUNTA DO GESTOR:
-{question}
+Interprete esse resultado em UMA frase em português natural, respondendo diretamente à pergunta.
+Regras:
+- Use exatamente o número {number}
+- Não invente contextos
+- Sem SQL ou código
+- Simples e direto
 
-RESULTADO DA CONSULTA ({result_count} linha(s)):
+Resposta:"""
+    
+    elif result_type == "ranking" and result_count > 0:
+        # Para rankings: destaque o primeiro lugar
+        first_item = result[0]
+        first_name = str(first_item[0]) if isinstance(first_item, (list, tuple)) and len(first_item) > 0 else "???"
+        first_value = str(first_item[1]) if isinstance(first_item, (list, tuple)) and len(first_item) > 1 else "???"
+        
+        return f"""Pergunta: {question}
+
+Resultado (ranking de {result_count} itens):
 {result_data}
 
-INSTRUÇÕES OBRIGATÓRIAS:
-1. Responda em português claro e acessível
-2. Use os números EXATOS do resultado (não arredonde arbitrariamente)
-3. Traduza códigos (F→Feminino, M→Masculino, etc) quando apropriado
-4. Se há múltiplas linhas, interprete a distribuição/ranking/tendência
-5. Se há um número único, use como resposta principal
-6. PROIBIDO: inventar dados, datas, contextos não fornecidos, efeitos adversos
-7. PROIBIDO: fazer comparações com períodos que não estão nos dados
-8. Se a pergunta pede maior/menor/ranking, identifique claramente quem está em primeiro
-9. Máximo 3-4 frases, seja conciso
+Interprete em UMA FRASE em português natural.
+Regras:
+- Destaque quem está em PRIMEIRO lugar: {first_name} com valor {first_value}
+- Use frases como "lidera com" ou "em primeiro lugar"
+- Máximo 2 frases
 
-CONTEXTO ADICIONAL:
-- Se há muitas linhas (>10), destaque os principais padrões
-- Se há proporções (razões, percentuais), calcule e mencione
-- Se há séries temporais, descreva a tendência (crescimento, queda, estável)
-- Se há categorizações (sexo, tipo, estado), mencione a distribuição
+Resposta:"""
+    
+    elif result_type == "distribution" and result_count > 0:
+        # Para distribuições: todas as categorias
+        return f"""Pergunta: {question}
 
-Responda apenas com a interpretação, sem formatação especial, sem JSON, sem explicações:"""
+Resultado (distribuição de {result_count} categorias):
+{result_data}
+
+Interprete em PORTUGUÊS NATURAL respondendo como estão distribuídos os dados.
+Regras:
+- Mencione todas as categorias
+- Se há percentuais, calcule e mencione
+- Máximo 3 frases
+- Claro e simples
+
+Resposta:"""
+    
+    elif result_type == "temporal" and result_count > 0:
+        # Para séries temporais: tendência
+        return f"""Pergunta: {question}
+
+Resultado (série temporal de {result_count} períodos):
+{result_data}
+
+Descreva a TENDÊNCIA e o PICO em UMA FRASE.
+Regras:
+- Identifique o pico (maior valor)
+- Descreva a tendência (crescimento/queda/estável)
+- Máximo 2 frases
+
+Resposta:"""
+    
+    elif result_type == "ratio" and result_count > 0:
+        # Para proporções
+        return f"""Pergunta: {question}
+
+Resultado (proporção/razão):
+{result_data}
+
+Interprete essa proporção em linguagem natural.
+Máximo 2 frases. Claro e direto.
+
+Resposta:"""
+    
+    elif result_type == "multi_dimension" and result_count > 0:
+        # Para análises cruzadas
+        return f"""Pergunta: {question}
+
+Resultado (análise multi-dimensão, {result_count} linhas):
+{result_data}
+
+Resuma o padrão principal observado.
+Máximo 3 frases. Destaque o que é mais importante.
+
+Resposta:"""
+    
+    else:
+        # Fallback genérico para "unknown" ou outros
+        return f"""Pergunta: {question}
+
+Resultado do banco de dados ({result_count} registros):
+{result_data}
+
+Interprete esse resultado em linguagem natural clara e simples.
+Responda como um especialista em saúde pública explicando para um gestor.
+Máximo 3 frases.
+
+Resposta:"""
 
 
 def _fallback_interpretation(result, question: str) -> str:
