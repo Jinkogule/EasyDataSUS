@@ -1,0 +1,162 @@
+{
+  "nome": "Unidades Básicas de Saúde",
+  "nome_curto": "atencao-basica",
+  "descricao": "Dados de Atenção Básica/Primária - Locais de atendimento, cobertura e recursos",
+  "descricao_completa": "Base de dados com informações de todas as Unidades Básicas de Saúde (UBS) cadastradas no Brasil, incluindo localização geográfica, identificação pelo CNES (Cadastro Nacional de Estabelecimentos de Saúde), endereço e coordenadas geográficas para apoio à gestão de capacidade assistencial e cobertura de atenção primária.",
+  "fonte": "DataSUS - CNES (Cadastro Nacional de Estabelecimentos de Saúde)",
+  "url": "https://dadosabertos.saude.gov.br/dataset/unidades-basicas-de-saude-ubs",
+  "periodo": "2018-2026",
+  "dominio": "Atenção Primária",
+  "objetivo_estrategico": "OE 3.6.1 - Ampliar acesso a dados abertos; OE 7.2/7.3 - Fortalecer RNDS e estruturas de informação",
+  "kri_associado": "Cobertura de Atenção Básica; Número de UBS por município; Distribuição geográfica de serviços",
+  "total_registros": 47721,
+  "total_colunas": 8,
+  "tabela_clickhouse": "atencao_basica",
+  "columns": {
+    "CNES": {
+      "type": "INT",
+      "description": "Código CNES - identificador único da Unidade Básica de Saúde",
+      "exemplo": "0023914",
+      "importante": true,
+      "chave_primaria": true,
+      "comprimento": 7
+    },
+    "UF": {
+      "type": "INT",
+      "description": "Código numérico da Unidade Federativa (estado)",
+      "exemplo": "31",
+      "mapeamento": {
+        "11": "RO",
+        "12": "AC",
+        "13": "AM",
+        "14": "RR",
+        "15": "PA",
+        "16": "AP",
+        "17": "TO",
+        "21": "MA",
+        "22": "PI",
+        "23": "CE",
+        "24": "RN",
+        "25": "PB",
+        "26": "PE",
+        "27": "AL",
+        "28": "SE",
+        "29": "BA",
+        "31": "MG",
+        "32": "ES",
+        "33": "RJ",
+        "35": "SP",
+        "41": "PR",
+        "42": "SC",
+        "43": "RS",
+        "50": "MS",
+        "51": "MT",
+        "52": "GO",
+        "53": "DF"
+      },
+      "importante": true
+    },
+    "IBGE": {
+      "type": "INT",
+      "description": "Código IBGE do município (geocódigo de 6 dígitos)",
+      "exemplo": "310620",
+      "importante": true,
+      "comprimento": 6
+    },
+    "NOME": {
+      "type": "STRING",
+      "description": "Nome oficial da Unidade Básica de Saúde",
+      "exemplo": "CENTRO DE SAUDE JARDIM MONTANHES",
+      "importante": true,
+      "comprimento_maximo": 255
+    },
+    "LOGRADOURO": {
+      "type": "STRING",
+      "description": "Endereço da UBS (rua, avenida, travessa, quadra, número)",
+      "exemplo": "RUA SAUDE",
+      "importante": true,
+      "comprimento_maximo": 255
+    },
+    "BAIRRO": {
+      "type": "STRING",
+      "description": "Nome do bairro onde a UBS está localizada",
+      "exemplo": "PADRE EUSTAQUIO",
+      "importante": true,
+      "comprimento_maximo": 128
+    },
+    "LATITUDE": {
+      "type": "FLOAT",
+      "description": "Coordenada de latitude geográfica (graus decimais, sistema WGS84)",
+      "exemplo": "-19.9115031449",
+      "importante": true,
+      "formato": "Valores negativos para hemisfério sul",
+      "precisao": 10
+    },
+    "LONGITUDE": {
+      "type": "FLOAT",
+      "description": "Coordenada de longitude geográfica (graus decimais, sistema WGS84)",
+      "exemplo": "-43.9914089036",
+      "importante": true,
+      "formato": "Valores negativos para hemisfério oeste",
+      "precisao": 10
+    }
+  },
+  "relacionamentos": {
+    "municipio": "IBGE - Relacionamento principal com dados demográficos e epidemiológicos",
+    "municipio_srag": "IBGE pode ser relacionado com SRAG para análise de prevenção vs. surtos",
+    "municipio_vacinacao": "IBGE pode ser relacionado com dados de vacinação para correlação de cobertura",
+    "municipio_leitos": "IBGE pode ser relacionado com Leitos para análise de capacidade vs. demanda"
+  },
+  "indices_recomendados": [
+    "UF",
+    "IBGE",
+    "CNES"
+  ],
+  "exemplos_queries": [
+    "Quantas UBS existem em São Paulo?",
+    "Qual é a cobertura de UBS (número de UBS por 100 mil habitantes) por estado?",
+    "Quais municípios têm menos de 5 UBS?",
+    "Qual é a distribuição geográfica de UBS em um estado específico?",
+    "Quantas UBS estão cadastradas em cada região do país?",
+    "Qual é a UBS mais próxima de uma localidade (usando latitude/longitude)?",
+    "Correlação: Cobertura de atenção básica vs. Taxa de surtos SRAG",
+    "Municípios com UBS acima e abaixo da média nacional"
+  ],
+  "campos_principais_filtro": [
+    "UF",
+    "IBGE",
+    "NOME",
+    "BAIRRO"
+  ],
+  "campos_principais_agregacao": [
+    "UF",
+    "IBGE",
+    "BAIRRO"
+  ],
+  "campos_geograficos": [
+    "LATITUDE",
+    "LONGITUDE"
+  ],
+  "qualidade_dados": {
+    "completude_media": 99.99,
+    "campos_completos": ["CNES", "UF", "IBGE", "LOGRADOURO", "BAIRRO", "LATITUDE", "LONGITUDE"],
+    "campos_com_valores_ausentes": ["NOME"],
+    "total_registros": 47721,
+    "cobertura_geografica": "Todos os 27 estados brasileiros",
+    "municípios_cobertos": 5483,
+    "nota": "Base de dados com excelente completude, ideal para análises geográficas e de cobertura"
+  },
+  "notas_importantes": [
+    "As coordenadas geográficas usam o sistema WGS84 (EPSG:4326)",
+    "Valores de latitude negativos indicam hemisfério sul",
+    "Valores de longitude negativos indicam hemisfério oeste",
+    "O código CNES é o identificador único nacional para todos os estabelecimentos de saúde",
+    "Esta base contém apenas UBS e não inclui outros tipos de estabelecimentos (hospitais, clínicas especializadas, etc.)",
+    "Dados de recursos (equipes, equipamentos) não estão disponíveis neste dataset; buscar em base CNES completa para informações adicionais"
+  ],
+  "contexto_saude_publica": {
+    "relevancia": "A Atenção Básica é a porta de entrada do Sistema Único de Saúde (SUS) e desempenha papel crucial em prevenção, vigilância e controle de doenças",
+    "relacao_com_objetivos": "Cobertura de Atenção Básica correlaciona-se com redução de internações evitáveis e melhor controle epidemiológico",
+    "seidig_alignment": "Alinhada com OE 3.6.1 (ampliar acesso a dados abertos) e OE 7.2/7.3 (fortalecer estruturas de informação para decisão)"
+  }
+}

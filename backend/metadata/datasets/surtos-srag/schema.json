@@ -1,0 +1,343 @@
+{
+  "nome": "Banco de Dados SRAG",
+  "nome_curto": "surtos-srag",
+  "descricao": "Vigilância da Síndrome Respiratória Aguda Grave de 2019 a 2026",
+  "descricao_completa": "Base de dados sobre notificações de Síndrome Respiratória Aguda Grave (SRAG) no Brasil, incluindo dados demográficos, sintomatologia, fatores de risco, testes laboratoriais e evolução clínica dos pacientes.",
+  "fonte": "DataSUS - Ministério da Saúde",
+  "url": "https://dadosabertos.saude.gov.br/dataset/banco-de-dados-da-sindrome-respiratoria-aguda-grave-srag-2019-a-2026",
+  "periodo": "2019-2026",
+  "dominio": "Vigilância Epidemiológica",
+  "objetivo_estrategico": "OE 9.1 - Aprimorar Monitoramento de Indicadores Estratégicos",
+  "kri_associado": "Taxa de surtos/SRAG detectados; Número de casos; Taxa de hospitalização",
+  "total_registros": 50000,
+  "total_colunas": 194,
+  "tabela_clickhouse": "srag",
+  "columns": {
+    "NU_NOTIFIC": {
+      "type": "BIGINT",
+      "description": "Número único de notificação do caso",
+      "exemplo": "31777574380953",
+      "importante": true,
+      "chave_primaria": true
+    },
+    "DT_NOTIFIC": {
+      "type": "DATE",
+      "description": "Data da notificação do caso ao sistema de vigilância",
+      "formato": "YYYY-MM-DD",
+      "exemplo": "2026-04-30",
+      "importante": true
+    },
+    "SEM_NOT": {
+      "type": "INT",
+      "description": "Semana epidemiológica da notificação",
+      "minimo": 1,
+      "maximo": 53,
+      "importante": false
+    },
+    "DT_SIN_PRI": {
+      "type": "DATE",
+      "description": "Data do primeiro sintoma",
+      "formato": "YYYY-MM-DD",
+      "exemplo": "2026-04-08",
+      "importante": true
+    },
+    "SEM_PRI": {
+      "type": "INT",
+      "description": "Semana epidemiológica do primeiro sintoma",
+      "minimo": 1,
+      "maximo": 53
+    },
+    "SG_UF_NOT": {
+      "type": "STRING",
+      "description": "Sigla da Unidade Federativa de notificação",
+      "formato": "Sigla de 2 caracteres",
+      "exemplo": "SP",
+      "importante": true,
+      "valores_possiveis": ["AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS", "MG", "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO"]
+    },
+    "CO_MUN_NOT": {
+      "type": "INT",
+      "description": "Código IBGE do município de notificação",
+      "exemplo": "355030",
+      "importante": true
+    },
+    "CS_SEXO": {
+      "type": "STRING",
+      "description": "Sexo do paciente",
+      "valores_possiveis": ["M", "F"],
+      "exemplo": "F",
+      "importante": true
+    },
+    "DT_NASC": {
+      "type": "DATE",
+      "description": "Data de nascimento do paciente",
+      "formato": "YYYY-MM-DD",
+      "exemplo": "2015-11-02",
+      "importante": true
+    },
+    "NU_IDADE_N": {
+      "type": "INT",
+      "description": "Idade do paciente em anos",
+      "minimo": 0,
+      "maximo": 150,
+      "exemplo": "10",
+      "importante": true
+    },
+    "TP_IDADE": {
+      "type": "INT",
+      "description": "Tipo de idade: 1=anos, 2=meses, 3=dias",
+      "valores_possiveis": [1, 2, 3],
+      "importante": false
+    },
+    "SG_UF": {
+      "type": "STRING",
+      "description": "Sigla da Unidade Federativa de residência",
+      "formato": "Sigla de 2 caracteres",
+      "exemplo": "RO",
+      "importante": true
+    },
+    "CO_MUN_RES": {
+      "type": "INT",
+      "description": "Código IBGE do município de residência",
+      "exemplo": "110020",
+      "importante": true
+    },
+    "FEBRE": {
+      "type": "INT",
+      "description": "Presença de febre (1=sim, 2=não, 9=não informado)",
+      "valores_possiveis": [1, 2, 9],
+      "importante": true
+    },
+    "TOSSE": {
+      "type": "INT",
+      "description": "Presença de tosse (1=sim, 2=não, 9=não informado)",
+      "valores_possiveis": [1, 2, 9],
+      "importante": true
+    },
+    "GARGANTA": {
+      "type": "INT",
+      "description": "Presença de dor de garganta (1=sim, 2=não, 9=não informado)",
+      "valores_possiveis": [1, 2, 9],
+      "importante": true
+    },
+    "DISPNEIA": {
+      "type": "INT",
+      "description": "Presença de dispneia/falta de ar (1=sim, 2=não, 9=não informado)",
+      "valores_possiveis": [1, 2, 9],
+      "importante": true
+    },
+    "DIARREIA": {
+      "type": "INT",
+      "description": "Presença de diarreia (1=sim, 2=não, 9=não informado)",
+      "valores_possiveis": [1, 2, 9],
+      "importante": false
+    },
+    "VOMITO": {
+      "type": "INT",
+      "description": "Presença de vômito (1=sim, 2=não, 9=não informado)",
+      "valores_possiveis": [1, 2, 9],
+      "importante": false
+    },
+    "CARDIOPATI": {
+      "type": "INT",
+      "description": "Presença de doença cardiovascular como fator de risco (1=sim, 2=não, 9=não informado)",
+      "valores_possiveis": [1, 2, 9],
+      "importante": true
+    },
+    "DIABETES": {
+      "type": "INT",
+      "description": "Presença de diabetes como fator de risco (1=sim, 2=não, 9=não informado)",
+      "valores_possiveis": [1, 2, 9],
+      "importante": true
+    },
+    "ASMA": {
+      "type": "INT",
+      "description": "Presença de asma como fator de risco (1=sim, 2=não, 9=não informado)",
+      "valores_possiveis": [1, 2, 9],
+      "importante": true
+    },
+    "PNEUMOPATI": {
+      "type": "INT",
+      "description": "Presença de doença pulmonar crônica (1=sim, 2=não, 9=não informado)",
+      "valores_possiveis": [1, 2, 9],
+      "importante": true
+    },
+    "IMUNODEPRE": {
+      "type": "INT",
+      "description": "Presença de imunodeficiência (1=sim, 2=não, 9=não informado)",
+      "valores_possiveis": [1, 2, 9],
+      "importante": true
+    },
+    "RENAL": {
+      "type": "INT",
+      "description": "Presença de doença renal crônica (1=sim, 2=não, 9=não informado)",
+      "valores_possiveis": [1, 2, 9],
+      "importante": true
+    },
+    "OBESIDADE": {
+      "type": "INT",
+      "description": "Presença de obesidade (1=sim, 2=não, 9=não informado)",
+      "valores_possiveis": [1, 2, 9],
+      "importante": true
+    },
+    "HOSPITAL": {
+      "type": "INT",
+      "description": "Necessidade de hospitalização (1=sim, 2=não, 9=não informado)",
+      "valores_possiveis": [1, 2, 9],
+      "exemplo": "1",
+      "importante": true
+    },
+    "DT_INTERNA": {
+      "type": "DATE",
+      "description": "Data de internação hospitalar",
+      "formato": "YYYY-MM-DD",
+      "exemplo": "2026-04-15",
+      "importante": true
+    },
+    "CO_MU_INTE": {
+      "type": "INT",
+      "description": "Código IBGE do município onde foi internado",
+      "exemplo": "110020",
+      "importante": false
+    },
+    "UTI": {
+      "type": "INT",
+      "description": "Necessidade de internação em UTI (1=sim, 2=não, 9=não informado)",
+      "valores_possiveis": [1, 2, 9],
+      "importante": true
+    },
+    "AMOSTRA": {
+      "type": "INT",
+      "description": "Coleta de amostra para teste (1=sim, 2=não, 9=não informado)",
+      "valores_possiveis": [1, 2, 9],
+      "importante": true
+    },
+    "DT_COLETA": {
+      "type": "DATE",
+      "description": "Data da coleta de amostra",
+      "formato": "YYYY-MM-DD",
+      "importante": false
+    },
+    "PCR_RESUL": {
+      "type": "INT",
+      "description": "Resultado do teste PCR (1=positivo, 2=negativo, 3=inconclusivo, 9=não realizado)",
+      "valores_possiveis": [1, 2, 3, 9],
+      "importante": true
+    },
+    "POS_PCRFLU": {
+      "type": "INT",
+      "description": "PCR positivo para influenza (1=sim, 2=não, 9=não informado)",
+      "valores_possiveis": [1, 2, 9],
+      "importante": true
+    },
+    "TP_FLU_PCR": {
+      "type": "INT",
+      "description": "Tipo de influenza detectada: 1=H1N1, 2=H3N2, 3=Influenza B, 9=não identificado",
+      "valores_possiveis": [1, 2, 3, 9],
+      "importante": true
+    },
+    "PCR_VSR": {
+      "type": "INT",
+      "description": "PCR para Vírus Sincicial Respiratório (1=positivo, 2=negativo, 9=não realizado)",
+      "valores_possiveis": [1, 2, 9],
+      "importante": true
+    },
+    "PCR_SARS2": {
+      "type": "INT",
+      "description": "PCR para SARS-CoV-2 (1=positivo, 2=negativo, 9=não realizado)",
+      "valores_possiveis": [1, 2, 9],
+      "exemplo": "2",
+      "importante": true
+    },
+    "CLASSI_FIN": {
+      "type": "INT",
+      "description": "Classificação final do caso: 1=SRAG confirmado, 2=Descartado, 3=Provável, 4=Não se aplica",
+      "valores_possiveis": [1, 2, 3, 4],
+      "importante": true
+    },
+    "EVOLUCAO": {
+      "type": "INT",
+      "description": "Evolução clínica: 1=Cura, 2=Óbito, 3=Óbito por outras causas, 9=Não informado",
+      "valores_possiveis": [1, 2, 3, 9],
+      "exemplo": "1",
+      "importante": true
+    },
+    "DT_EVOLUCA": {
+      "type": "DATE",
+      "description": "Data do desfecho/evolução",
+      "formato": "YYYY-MM-DD",
+      "importante": true
+    },
+    "VACINA_COV": {
+      "type": "INT",
+      "description": "Vacinação contra COVID-19 (1=sim, 2=não, 9=não informado)",
+      "valores_possiveis": [1, 2, 9],
+      "importante": true
+    },
+    "DOSE_1_COV": {
+      "type": "DATE",
+      "description": "Data da primeira dose de COVID-19",
+      "formato": "YYYY-MM-DD",
+      "importante": false
+    },
+    "DOSE_2_COV": {
+      "type": "DATE",
+      "description": "Data da segunda dose de COVID-19",
+      "formato": "YYYY-MM-DD",
+      "importante": false
+    }
+  },
+  "relacionamentos": {
+    "municipio_notificacao": "CO_MUN_NOT - Pode ser relacionado com UBS para análise de cobertura e capacidade",
+    "municipio_residencia": "CO_MUN_RES - Relacionamento com dados demográficos e populacionais",
+    "municipio_internacao": "CO_MU_INTE - Relacionamento com Leitos para análise de ocupação e surtos"
+  },
+  "indices_recomendados": [
+    "DT_NOTIFIC",
+    "SG_UF_NOT",
+    "CO_MUN_NOT",
+    "HOSPITAL",
+    "EVOLUCAO",
+    "CLASSI_FIN"
+  ],
+  "exemplos_queries": [
+    "Qual foi o total de casos SRAG notificados em março de 2024?",
+    "Quais municípios tiveram mais casos de SRAG com evolução para óbito?",
+    "Como evoluiu o número de casos confirmados ao longo do tempo?",
+    "Qual é a taxa de hospitalização por UF?",
+    "Quantos casos tiveram necessidade de UTI?",
+    "Qual a correlação entre surtos SRAG (casos com febre + tosse + dispneia) e ocupação de leitos?",
+    "Quantos casos testaram positivo para influenza H1N1?",
+    "Qual é a idade média dos pacientes hospitalizados com SRAG?",
+    "Quantos casos com comorbidades (diabetes, cardiopatia) evoluíram para óbito?",
+    "Qual é a taxa de casos vacinados contra COVID-19?"
+  ],
+  "campos_principais_filtro": [
+    "DT_NOTIFIC",
+    "SG_UF_NOT",
+    "CO_MUN_NOT",
+    "CS_SEXO",
+    "NU_IDADE_N",
+    "HOSPITAL",
+    "EVOLUCAO",
+    "CLASSI_FIN",
+    "PCR_SARS2",
+    "VACINA_COV"
+  ],
+  "campos_principais_agregacao": [
+    "DT_NOTIFIC",
+    "SEM_NOT",
+    "SG_UF_NOT",
+    "CO_MUN_NOT",
+    "CS_SEXO",
+    "HOSPITAL",
+    "EVOLUCAO",
+    "CLASSI_FIN"
+  ],
+  "qualidade_dados": {
+    "completude_media": 92.5,
+    "campos_criticos_completos": ["NU_NOTIFIC", "DT_NOTIFIC", "SG_UF_NOT", "EVOLUCAO"],
+    "campos_com_valores_ausentes": ["DT_INTERNA", "PCR_RESUL", "CLASSI_FIN"],
+    "nota": "Base de dados de vigilância com boa completude em campos demográficos e de evolução"
+  }
+}

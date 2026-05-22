@@ -3,16 +3,49 @@ Configuração centralizada de todos os datasets do sistema.
 
 QUALQUER novo tema deve ser registrado aqui.
 Este arquivo mapeia dataset → table_name e fornece utilidades centralizadas.
+Inclui: Vacinação COVID-19, Leitos, SRAG, Atenção Básica
 """
 
 DATASETS_CONFIG = {
     "covid-19-vacinacao": {
         "table_name": "vacinacao",
         "description": "Vacinação COVID-19 no Brasil",
+        "name": "Campanha Nacional de Vacinação COVID-19",
+        "schema_path": "backend/metadata/datasets/covid-19-vacinacao/schema.json",
+        "csv_path": "backend/data/datasets/covid-19-vacinacao/vacinacao-covid.csv",
+        "objetivo_estrategico": "OE 3.6.1",
+        "dominio": "Imunização",
+        "status": "implementado",
     },
     "leitos": {
         "table_name": "leitos",
         "description": "Dados de leitos em hospitais e estabelecimentos de saúde no Brasil",
+        "name": "Leitos Hospitalares",
+        "schema_path": "backend/metadata/datasets/leitos/schema.json",
+        "csv_path": "backend/data/datasets/leitos/Leitos_2026.csv",
+        "objetivo_estrategico": "OE 9.1",
+        "dominio": "Gestão Assistencial",
+        "status": "implementado",
+    },
+    "surtos-srag": {
+        "table_name": "srag",
+        "description": "Vigilância da Síndrome Respiratória Aguda Grave",
+        "name": "Síndrome Respiratória Aguda Grave (SRAG)",
+        "schema_path": "backend/metadata/datasets/surtos-srag/schema.json",
+        "csv_path": "backend/data/datasets/surtos-srag/INFLUD26-18-05-2026.csv",
+        "objetivo_estrategico": "OE 9.1",
+        "dominio": "Vigilância Epidemiológica",
+        "status": "implementado",
+    },
+    "atencao-basica": {
+        "table_name": "atencao_basica",
+        "description": "Unidades Básicas de Saúde no Brasil",
+        "name": "Unidades Básicas de Saúde (Atenção Básica)",
+        "schema_path": "backend/metadata/datasets/atencao-basica/schema.json",
+        "csv_path": "backend/data/datasets/atencao-basica/Unidades_Basicas_Saude-UBS.csv",
+        "objetivo_estrategico": "OE 3.6.1, OE 7.2/7.3",
+        "dominio": "Atenção Primária",
+        "status": "implementado",
     },
 }
 

@@ -75,13 +75,14 @@ def extract_sql(text: str) -> str:
     logger.warning(f"Não conseguiu extrair SQL válido de: {text[:100]}")
     return None
 
-def validate_sql_syntax(sql: str, dataset: str = "covid-19-vacinacao") -> bool:
+def validate_sql_syntax(sql: str, dataset: str = "covid-19-vacinacao", original_question: str = "") -> bool:
     """
     Valida sintaxe básica de SQL para um dataset específico.
     
     Args:
         sql: Query SQL a validar
         dataset: Dataset esperado (padrão: "covid-19-vacinacao")
+        original_question: Pergunta original para validar consistência (ex: detectar SELECT * em "quantas...")
     
     Returns:
         True se SQL é válido, False caso contrário
@@ -110,6 +111,16 @@ def validate_sql_syntax(sql: str, dataset: str = "covid-19-vacinacao") -> bool:
     if expected_table not in sql_clean.lower():
         logger.warning(f"SQL não referencia tabela '{expected_table}' do dataset '{dataset}'")
         return False
+    
+    # CRÍTICO: Validar que "SELECT *" não é usado para perguntas de contagem
+    if original_question:
+        original_lower = original_question.lower()
+        is_count_question = any(original_lower.startswith(q) for q in ["quantas", "quantos", "qual é o total", "qual é a quantidade"])
+        
+        # Se é pergunta de contagem, NÃO pode ser SELECT *
+        if is_count_question and "SELECT *" in sql_clean:
+            logger.warning(f"ERRO CRÍTICO: Pergunta sobre 'quantas/quantos' gerou SELECT * (deve ser COUNT): {sql[:100]}")
+            return False
     
     # CRÍTICO: Se tem WHERE, DEVE ter operador de comparação
     if "WHERE" in sql_clean:
@@ -335,7 +346,32 @@ def generate_sql(question, metadata, model_name, dataset: str = "covid-19-vacina
     # FIXO: Gerar regras específicas do dataset
     dataset_rules = _get_sql_rules_for_dataset(dataset, schema_info)
 
-    prompt = f"""Você é um especialista em SQL para ClickHouse em português.
+    # DETECÇÃO RÁPIDA DE PADRÃO: Se a pergunta começa com "quantas/quantos", força COUNT(*)
+    question_lower = question.lower().strip()
+    is_count_question = any(question_lower.startswith(q) for q in ["quantas", "quantos", "qual é o total", "qual é a quantidade"])
+    
+    if is_count_question:
+        # Prompt SIMPLIFICADO para perguntas de contagem
+        prompt = f"""Você é um especialista em SQL ClickHouse. Responda APENAS com SQL válido, nada mais.
+
+TAREFA: Gerar COUNT(*) para: {question}
+
+TABELA: {table_name}
+COLUNAS: {', '.join(schema_info.get('colunas_principais', {}).keys())}
+
+REGRA ABSOLUTA: Para "quantas/quantos" → SEMPRE use COUNT(*)
+
+Exemplo: 
+  Pergunta: "Quantas vacinas em SP?"
+  Resposta: SELECT COUNT(*) FROM vacinacao WHERE paciente_endereco_uf = 'SP' LIMIT 10000
+
+COLUNAS MAIS USADAS:
+{colunas_info}
+
+SQL para "{question}":"""
+    else:
+        # Prompt COMPLETO para perguntas complexas
+        prompt = f"""Você é um especialista em SQL para ClickHouse em português.
 
 INSTRUÇÃO CRÍTICA:
 - Responda APENAS com uma query SQL válida
@@ -361,21 +397,6 @@ Fonte: {schema_info.get('fonte', 'N/A')}
 Colunas disponíveis:
 {colunas_info}
 
-FUNÇÕES CLICKHOUSE NECESSÁRIAS:
-- COUNT(*) - contar linhas
-- AVG(coluna) - calcular média numérica
-- MIN(coluna) - valor mínimo
-- MAX(coluna) - valor máximo
-- STDDEV(coluna) - desvio padrão
-- MEDIAN(coluna) - mediana
-- SUM(coluna) - somar valores
-- GROUP BY - agrupar
-- WHERE - filtrar
-- ORDER BY DESC - ordenar descendente (para ranking)
-- LIMIT - limitar resultados
-- toYYYYMM() - converter data para formato YYYYMM
-- toYYYYMMDD() - converter data para formato YYYYMMDD
-
 EXEMPLOS DE QUERIES CORRETAS:
 {examples}
 
@@ -396,7 +417,7 @@ Responda apenas com a query SQL:"""
             logger.warning("Não conseguiu extrair SQL da resposta")
             return fallback_sql(question, dataset)
         
-        if not validate_sql_syntax(sql, dataset):
+        if not validate_sql_syntax(sql, dataset, question):
             logger.warning(f"SQL falhou validação para dataset {dataset}: {sql}")
             return fallback_sql(question, dataset)
         

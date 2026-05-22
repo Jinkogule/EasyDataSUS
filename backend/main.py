@@ -1,7 +1,7 @@
 import logging
 import os
 from fastapi import FastAPI
-from routes import query, questions, admin
+from routes import query, questions, admin, datasets
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
@@ -34,6 +34,7 @@ app.add_middleware(
 
 # Rotas
 app.include_router(query.router, prefix="/api", tags=["query"])
+app.include_router(datasets.router, prefix="/api", tags=["datasets"])
 app.include_router(questions.router, prefix="/api", tags=["questions"])
 app.include_router(admin.router, prefix="/api", tags=["admin"])
 
