@@ -27,6 +27,7 @@ from services.sql_service import generate_sql
 from db.clickhouse import run_query
 from services.interpretation_service import interpret_result
 from config.datasets import get_table_name
+from metadata.loader import load_metadata
 
 
 def parse_questions_from_markdown(markdown_file: Path) -> dict:
@@ -69,12 +70,16 @@ def parse_questions_from_markdown(markdown_file: Path) -> dict:
     question_id = 0
     
     # Pattern para seções de dataset
-    dataset_pattern = r"## 📊 DATASET:\s+(.+?)(?=##|$)"
+    # Usa split para dividir o arquivo por cada "## ... DATASET:" header
+    dataset_sections = re.split(r"(?=^## .* DATASET:)", content, flags=re.MULTILINE)
     
-    for dataset_match in re.finditer(dataset_pattern, content, re.IGNORECASE | re.DOTALL):
-        dataset_name = dataset_match.group(1).strip()
-        dataset_section = dataset_match.group(0)
+    for dataset_section in dataset_sections:
+        # Extrair nome do dataset do header
+        dataset_match = re.search(r"^## .* DATASET: ([^\n]+)", dataset_section, re.MULTILINE)
+        if not dataset_match:
+            continue  # Pular se não tiver header válido
         
+        dataset_name = dataset_match.group(1).strip()
         questions_dict[dataset_name] = []
         
         # Pattern para categorias dentro do dataset
@@ -143,13 +148,25 @@ def test_question(question_data: dict, dataset: str, verbose: bool = False) -> d
     }
     
     try:
+        # Carregar metadata do dataset
+        metadata = None
+        try:
+            metadata = load_metadata(dataset)
+            # Garantir que é string JSON
+            if isinstance(metadata, dict):
+                metadata = json.dumps(metadata, ensure_ascii=False)
+        except Exception as e:
+            # Fallback: string JSON vazia
+            metadata = "{}"
+        
         # Step 1: Gerar SQL
         if verbose:
             print(f"  [Gerando SQL]...", end=" ", flush=True)
         
         sql = generate_sql(
             question=question_data["question"],
-            model="deepseek-local",
+            metadata=metadata,
+            model_name="deepseek-local",
             dataset=dataset
         )
         
