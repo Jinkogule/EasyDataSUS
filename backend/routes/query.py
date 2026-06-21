@@ -2,6 +2,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 import logging
 import re
+import time
 from typing import Optional
 
 from services.sql_service import generate_sql
@@ -152,6 +153,13 @@ def ask(req: AskRequest):
     ```
     """
     
+    # ========== TIMING SETUP ==========
+    time_start = time.time()
+    timings = {
+        "total_start": time_start,
+        "stages": {}
+    }
+    
     logger.info(f"Pergunta recebida: {req.question}")
     logger.info(f"Modelo: {req.model}")
     if req.dataset:
@@ -183,9 +191,12 @@ def ask(req: AskRequest):
                 "success": False
             }
         
-        # 1. Gerar SQL com LLM
+        # ========== 1. GERAR SQL COM LLM ==========
+        stage_start = time.time()
         logger.info("Gerando SQL...")
         raw_sql = generate_sql(req.question, metadata, req.model, dataset_to_use)
+        time_sql_generation = time.time() - stage_start
+        timings["stages"]["sql_generation"] = time_sql_generation
         
         if not raw_sql:
             logger.error("Falha ao gerar SQL")
@@ -200,12 +211,16 @@ def ask(req: AskRequest):
         
         logger.debug(f"SQL gerado (raw): {raw_sql}")
         
-        # 2. Sanitizar
+        # ========== 2. SANITIZAR ==========
+        stage_start = time.time()
         logger.info("Sanitizando SQL...")
         sql = sanitize_sql(raw_sql)
+        time_sanitization = time.time() - stage_start
+        timings["stages"]["sanitization"] = time_sanitization
         logger.debug(f"SQL sanitizado: {sql}")
         
-        # 3. Validar
+        # ========== 3. VALIDAR ==========
+        stage_start = time.time()
         logger.info("Validando SQL...")
         if not is_valid_sql(sql, dataset_to_use):
             logger.error(f"SQL inválido: {sql}")
@@ -217,10 +232,15 @@ def ask(req: AskRequest):
                 "insight": "Desculpe, a consulta gerada não é válida para este banco de dados.",
                 "success": False
             }
+        time_validation = time.time() - stage_start
+        timings["stages"]["validation"] = time_validation
         
-        # 4. Executar
+        # ========== 4. EXECUTAR NO CLICKHOUSE ==========
+        stage_start = time.time()
         logger.info("Executando query no ClickHouse...")
         result = run_query(sql)
+        time_database = time.time() - stage_start
+        timings["stages"]["database_execution"] = time_database
         
         # Verificar se houve erro
         if isinstance(result, dict) and "error" in result:
@@ -236,9 +256,40 @@ def ask(req: AskRequest):
         
         logger.info(f"Query executada com sucesso. Resultado: {len(result)} linhas")
         
-        # 5. Interpretar
+        # ========== 5. INTERPRETAR RESULTADO COM LLM ==========
+        stage_start = time.time()
         logger.info("Interpretando resultado...")
         insight = interpret_result(req.question, result, req.model, dataset=dataset_to_use)
+        time_interpretation = time.time() - stage_start
+        timings["stages"]["interpretation"] = time_interpretation
+        
+        # ========== CALCULAR TEMPOS TOTAIS ==========
+        time_total = time.time() - time_start
+        timings["total_ms"] = round(time_total * 1000, 2)
+        
+        # ========== PRINT TIMING REPORT NO TERMINAL ==========
+        print("\n" + "="*70)
+        print(f"⏱️  TIMING REPORT - {req.model.upper()}")
+        print("="*70)
+        print(f"Pergunta: {req.question[:60]}...")
+        print(f"Dataset: {dataset_to_use}")
+        print("-"*70)
+        print(f"  SQL Generation (LLM):        {timings['stages']['sql_generation']:>8.2f} s")
+        print(f"  SQL Sanitization:            {timings['stages']['sanitization']:>8.2f} s")
+        print(f"  SQL Validation:              {timings['stages']['validation']:>8.2f} s")
+        print(f"  Database Execution:          {timings['stages']['database_execution']:>8.2f} s")
+        print(f"  Result Interpretation (LLM): {timings['stages']['interpretation']:>8.2f} s")
+        print("-"*70)
+        print(f"  TOTAL:                       {timings['total_ms']/1000:>8.2f} s")
+        print("="*70 + "\n")
+        
+        # ========== LOG DETALHADO ==========
+        logger.info(f"Timing - SQL Gen: {timings['stages']['sql_generation']:.2f}s, "
+                   f"Sanitization: {timings['stages']['sanitization']:.2f}s, "
+                   f"Validation: {timings['stages']['validation']:.2f}s, "
+                   f"DB: {timings['stages']['database_execution']:.2f}s, "
+                   f"Interpretation: {timings['stages']['interpretation']:.2f}s, "
+                   f"TOTAL: {timings['total_ms']/1000:.2f}s")
         
         return {
             "question": req.question,
@@ -246,7 +297,15 @@ def ask(req: AskRequest):
             "sql": sql,
             "data": result,
             "insight": insight,
-            "success": True
+            "success": True,
+            "timing_s": {
+                "sql_generation_llm": round(timings['stages']['sql_generation'], 2),
+                "sanitization": round(timings['stages']['sanitization'], 2),
+                "validation": round(timings['stages']['validation'], 2),
+                "database_execution": round(timings['stages']['database_execution'], 2),
+                "interpretation_llm": round(timings['stages']['interpretation'], 2),
+                "total": round(timings['total_ms']/1000, 2)
+            }
         }
     
     except Exception as e:
