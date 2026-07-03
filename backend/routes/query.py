@@ -8,6 +8,8 @@ from typing import Optional, List, Dict, Tuple
 from services.sql_service import generate_sql
 from db.clickhouse import run_query
 from services.interpretation_service import interpret_result
+from services.multibase_service import multibase_service
+from services.relationship_service import relationship_service
 from metadata.loader import load_metadata, get_available_datasets, get_metadata_by_dataset
 from config.datasets import DATASETS_CONFIG
 
@@ -57,8 +59,8 @@ def _detect_candidate_datasets(question: str) -> List[str]:
     return [dataset_id for dataset_id, _ in scores]
 
 
-def _build_interoperability_sql(question: str, detected_datasets: List[str]) -> Optional[Tuple[str, List[str]]]:
-    """Monta um SQL de JOIN controlado para perguntas de interoperabilidade conhecidas."""
+def _build_interoperability_fallback_sql(question: str, detected_datasets: List[str]) -> Optional[Tuple[str, List[str]]]:
+    """Monta um SQL determinístico de fallback para interoperabilidade conhecida."""
 
     q = question.lower()
     datasets_set = set(detected_datasets)
@@ -66,13 +68,27 @@ def _build_interoperability_sql(question: str, detected_datasets: List[str]) -> 
     if {"surtos-srag", "atencao-basica"}.issubset(datasets_set):
         if any(word in q for word in ["município", "municipio", "cidade", "ibge"]):
             sql = """
+            WITH
+            srag_by_municipality AS (
+                SELECT
+                    co_mun_not AS ibge,
+                    COUNT(*) AS total_srag
+                FROM srag
+                GROUP BY co_mun_not
+            ),
+            ubs_by_municipality AS (
+                SELECT
+                    ibge,
+                    COUNT(DISTINCT cnes) AS total_ubs
+                FROM atencao_basica
+                GROUP BY ibge
+            )
             SELECT
-                a.ibge,
-                COUNT(*) AS total_srag,
-                COUNT(DISTINCT a.cnes) AS total_ubs
-            FROM srag s
-            INNER JOIN atencao_basica a ON s.co_mun_not = a.ibge
-            GROUP BY a.ibge
+                s.ibge,
+                s.total_srag,
+                u.total_ubs
+            FROM srag_by_municipality AS s
+            INNER JOIN ubs_by_municipality AS u ON s.ibge = u.ibge
             ORDER BY total_srag DESC
             LIMIT 100
             """.strip()
@@ -80,26 +96,56 @@ def _build_interoperability_sql(question: str, detected_datasets: List[str]) -> 
 
         if any(word in q for word in ["estado", "uf", "região", "regiao"]):
             sql = """
+            WITH
+            srag_by_uf AS (
+                SELECT
+                    sg_uf_not AS uf,
+                    COUNT(*) AS total_srag
+                FROM srag
+                GROUP BY sg_uf_not
+            ),
+            ubs_by_uf AS (
+                SELECT
+                    uf,
+                    COUNT(DISTINCT cnes) AS total_ubs,
+                    COUNT(DISTINCT ibge) AS municipios_com_ubs
+                FROM atencao_basica
+                GROUP BY uf
+            )
             SELECT
-                a.uf,
-                COUNT(*) AS total_srag,
-                COUNT(DISTINCT a.ibge) AS municipios_com_ubs,
-                COUNT(DISTINCT a.cnes) AS total_ubs
-            FROM srag s
-            INNER JOIN atencao_basica a ON s.co_mun_not = a.ibge
-            GROUP BY a.uf
+                s.uf,
+                s.total_srag,
+                u.municipios_com_ubs,
+                u.total_ubs
+            FROM srag_by_uf AS s
+            INNER JOIN ubs_by_uf AS u ON s.uf = u.uf
             ORDER BY total_srag DESC
             LIMIT 100
             """.strip()
             return sql, ["surtos-srag", "atencao-basica"]
 
         sql = """
+        WITH
+        srag_by_municipality AS (
+            SELECT
+                co_mun_not AS ibge,
+                COUNT(*) AS total_srag
+            FROM srag
+            GROUP BY co_mun_not
+        ),
+        ubs_by_municipality AS (
+            SELECT
+                ibge,
+                COUNT(DISTINCT cnes) AS total_ubs
+            FROM atencao_basica
+            GROUP BY ibge
+        )
         SELECT
-            COUNT(*) AS total_registros_cruzados,
-            COUNT(DISTINCT s.co_mun_not) AS municipios_cruzados,
-            COUNT(DISTINCT a.cnes) AS ubs_relacionadas
-        FROM srag s
-        INNER JOIN atencao_basica a ON s.co_mun_not = a.ibge
+            s.ibge,
+            s.total_srag,
+            u.total_ubs
+        FROM srag_by_municipality AS s
+        INNER JOIN ubs_by_municipality AS u ON s.ibge = u.ibge
         """.strip()
         return sql, ["surtos-srag", "atencao-basica"]
 
@@ -251,77 +297,175 @@ def ask(req: AskRequest):
         logger.info(f"Dataset especificado: {req.dataset}")
     
     try:
-        # Determinar dataset a usar
-        dataset_to_use = req.dataset or "covid-19-vacinacao"
-
         detected_datasets = _detect_candidate_datasets(req.question)
-        join_plan = _build_interoperability_sql(req.question, detected_datasets)
+        dataset_to_use = req.dataset or "covid-19-vacinacao"
+        selected_datasets = [dataset_to_use]
+        cross_dataset = False
+        routing_mode = "single_dataset"
+        sql_generation_mode = "llm"
+        relationships_used: List[str] = []
+        validation_payload: Dict[str, object] = {"valid": False, "tables": [], "joins": []}
 
-        if join_plan is not None:
-            sql, join_datasets = join_plan
-            logger.info(f"Interoperabilidade detectada automaticamente: {', '.join(join_datasets)}")
-            sanitized_sql = sanitize_sql(sql)
-
-            if not is_valid_sql(sanitized_sql, join_datasets[0]):
-                logger.error(f"SQL de interoperabilidade inválido: {sanitized_sql}")
-                return {
-                    "question": req.question,
-                    "dataset": ",".join(join_datasets),
-                    "sql": sanitized_sql,
-                    "data": {"error": "SQL de interoperabilidade inválido"},
-                    "insight": "Desculpe, não consegui validar a consulta entre bases.",
-                    "success": False
-                }
-
-            stage_start = time.time()
-            logger.info("Executando JOIN interoperável no ClickHouse...")
-            result = run_query(sanitized_sql)
-            time_database = time.time() - stage_start
-            timings["stages"]["database_execution"] = time_database
-
-            if isinstance(result, dict) and "error" in result:
-                logger.error(f"Erro na execução interoperável: {result['error']}")
-                return {
-                    "question": req.question,
-                    "dataset": ",".join(join_datasets),
-                    "sql": sanitized_sql,
-                    "data": result,
-                    "insight": f"Erro ao executar a consulta entre bases: {result.get('message', result['error'])}",
-                    "success": False
-                }
-
-            logger.info(f"JOIN executado com sucesso. Resultado: {len(result)} linhas")
-
-            time_total = time.time() - time_start
-            timings["total_ms"] = round(time_total * 1000, 2)
-
-            print("\n" + "="*70)
-            print(f"⏱️  TIMING REPORT - {req.model.upper()} - INTEROPERABILIDADE")
-            print("="*70)
-            print(f"Pergunta: {req.question[:60]}...")
-            print(f"Datasets: {', '.join(join_datasets)}")
-            print("-"*70)
-            print(f"  Database Execution:          {timings['stages']['database_execution']:>8.2f} s")
-            print(f"  TOTAL:                       {timings['total_ms']/1000:>8.2f} s")
-            print("="*70 + "\n")
-
-            return {
-                "question": req.question,
-                "dataset": ",".join(join_datasets),
-                "sql": sanitized_sql,
-                "data": result,
-                "insight": f"Consulta interoperável executada entre {', '.join(join_datasets)}.",
-                "success": True,
-                "timing_s": {
-                    "database_execution": round(timings['stages']['database_execution'], 2),
-                    "total": round(timings['total_ms']/1000, 2)
-                }
-            }
-        
-        # Se dataset não foi fornecido, tentar detectar
         if not req.dataset:
-            if detected_datasets:
-                dataset_to_use = detected_datasets[0]
+            stage_start = time.time()
+            selection = multibase_service.select_datasets(
+                req.question,
+                req.model,
+                detected_datasets or list(DATASETS_CONFIG.keys()),
+            )
+            timings["stages"]["dataset_selection"] = time.time() - stage_start
+
+            selected_datasets = selection.datasets or (detected_datasets[:1] if detected_datasets else [dataset_to_use])
+            cross_dataset = selection.cross_dataset and len(selected_datasets) > 1
+            routing_mode = selection.routing_mode
+
+            if cross_dataset:
+                stage_start = time.time()
+                relationships = relationship_service.find_relationships(selected_datasets)
+                timings["stages"]["relationship_lookup"] = time.time() - stage_start
+
+                if not relationships:
+                    return {
+                        "question": req.question,
+                        "dataset": ",".join(selected_datasets),
+                        "datasets": selected_datasets,
+                        "cross_dataset": True,
+                        "relationships": [],
+                        "routing_mode": routing_mode,
+                        "sql_generation_mode": "none",
+                        "validation": {"valid": False, "tables": [], "joins": [], "errors": ["Nenhum relacionamento cadastrado para as bases selecionadas"]},
+                        "data": {"error": "Não há relacionamento cadastrado para as bases selecionadas."},
+                        "insight": "Não há um relacionamento validado para montar essa consulta entre bases.",
+                        "success": False,
+                    }
+
+                relationships_used = [relationship.id for relationship in relationships]
+
+                stage_start = time.time()
+                multibase_context = multibase_service.build_multibase_context(selected_datasets, relationships)
+                timings["stages"]["context_construction"] = time.time() - stage_start
+
+                stage_start = time.time()
+                raw_sql, sql_generation_mode = multibase_service.generate_sql(
+                    req.question,
+                    req.model,
+                    selected_datasets,
+                    relationships,
+                )
+                timings["stages"]["sql_generation"] = time.time() - stage_start
+
+                if not raw_sql:
+                    raw_sql = multibase_service.build_deterministic_fallback_sql(selected_datasets, relationships)
+                    if raw_sql:
+                        sql_generation_mode = "deterministic_fallback"
+                    else:
+                        return {
+                            "question": req.question,
+                            "dataset": ",".join(selected_datasets),
+                            "datasets": selected_datasets,
+                            "cross_dataset": True,
+                            "relationships": relationships_used,
+                            "routing_mode": routing_mode,
+                            "sql_generation_mode": sql_generation_mode,
+                            "validation": {"valid": False, "tables": [], "joins": [], "errors": ["Não foi possível gerar SQL multibase"]},
+                            "data": {"error": "Não foi possível gerar SQL multibase."},
+                            "insight": "Não foi possível gerar uma consulta multibase válida.",
+                            "success": False,
+                        }
+
+                stage_start = time.time()
+                sql = sanitize_sql(raw_sql)
+                validation_result = multibase_service.validate_sql(sql, selected_datasets, relationships)
+                timings["stages"]["validation"] = time.time() - stage_start
+
+                if not validation_result.valid:
+                    fallback_sql = multibase_service.build_deterministic_fallback_sql(selected_datasets, relationships)
+                    if fallback_sql:
+                        sql = sanitize_sql(fallback_sql)
+                        validation_result = multibase_service.validate_sql(sql, selected_datasets, relationships)
+                        sql_generation_mode = "deterministic_fallback"
+                    if not validation_result.valid:
+                        return {
+                            "question": req.question,
+                            "dataset": ",".join(selected_datasets),
+                            "datasets": selected_datasets,
+                            "cross_dataset": True,
+                            "relationships": relationships_used,
+                            "routing_mode": routing_mode,
+                            "sql_generation_mode": sql_generation_mode,
+                            "validation": {
+                                "valid": False,
+                                "tables": validation_result.tables,
+                                "joins": validation_result.joins,
+                                "errors": validation_result.errors,
+                            },
+                            "data": {"error": "SQL multibase inválido"},
+                            "insight": "A consulta multibase não passou na validação estrutural.",
+                            "success": False,
+                        }
+
+                validation_payload = {
+                    "valid": validation_result.valid,
+                    "tables": validation_result.tables,
+                    "joins": validation_result.joins,
+                    "errors": validation_result.errors,
+                }
+
+                stage_start = time.time()
+                logger.info("Executando consulta multibase no ClickHouse...")
+                result = run_query(sql)
+                timings["stages"]["database_execution"] = time.time() - stage_start
+
+                if isinstance(result, dict) and "error" in result:
+                    return {
+                        "question": req.question,
+                        "dataset": ",".join(selected_datasets),
+                        "datasets": selected_datasets,
+                        "cross_dataset": True,
+                        "relationships": relationships_used,
+                        "routing_mode": routing_mode,
+                        "sql_generation_mode": sql_generation_mode,
+                        "validation": validation_payload,
+                        "sql": sql,
+                        "data": result,
+                        "insight": f"Erro ao executar a consulta multibase: {result.get('message', result['error'])}",
+                        "success": False,
+                    }
+
+                stage_start = time.time()
+                insight = interpret_result(req.question, result, req.model, dataset=",".join(selected_datasets))
+                timings["stages"]["interpretation"] = time.time() - stage_start
+
+                time_total = time.time() - time_start
+                timings["total_ms"] = round(time_total * 1000, 2)
+
+                return {
+                    "question": req.question,
+                    "dataset": ",".join(selected_datasets),
+                    "datasets": selected_datasets,
+                    "cross_dataset": True,
+                    "relationships": relationships_used,
+                    "routing_mode": routing_mode,
+                    "sql_generation_mode": sql_generation_mode,
+                    "validation": validation_payload,
+                    "sql": sql,
+                    "data": result,
+                    "insight": insight,
+                    "success": True,
+                    "timing_s": {
+                        "dataset_selection": round(timings["stages"].get("dataset_selection", 0), 2),
+                        "relationship_lookup": round(timings["stages"].get("relationship_lookup", 0), 2),
+                        "context_construction": round(timings["stages"].get("context_construction", 0), 2),
+                        "sql_generation_llm": round(timings["stages"].get("sql_generation", 0), 2),
+                        "validation": round(timings["stages"].get("validation", 0), 2),
+                        "database_execution": round(timings["stages"].get("database_execution", 0), 2),
+                        "interpretation_llm": round(timings["stages"].get("interpretation", 0), 2),
+                        "total": round(timings["total_ms"] / 1000, 2),
+                    },
+                }
+
+            if selected_datasets:
+                dataset_to_use = selected_datasets[0]
                 logger.info(f"Dataset detectado automaticamente: {dataset_to_use}")
         
         # Carregar metadata do dataset
@@ -442,11 +586,25 @@ def ask(req: AskRequest):
         return {
             "question": req.question,
             "dataset": dataset_to_use,
+            "datasets": [dataset_to_use],
+            "cross_dataset": False,
+            "relationships": [],
+            "routing_mode": "single_dataset",
+            "sql_generation_mode": "llm",
+            "validation": {
+                "valid": True,
+                "tables": [DATASETS_CONFIG.get(dataset_to_use, {}).get("table_name", dataset_to_use)],
+                "joins": [],
+                "errors": [],
+            },
             "sql": sql,
             "data": result,
             "insight": insight,
             "success": True,
             "timing_s": {
+                "dataset_selection": round(timings['stages'].get('dataset_selection', 0), 2),
+                "relationship_lookup": round(timings['stages'].get('relationship_lookup', 0), 2),
+                "context_construction": round(timings['stages'].get('context_construction', 0), 2),
                 "sql_generation_llm": round(timings['stages']['sql_generation'], 2),
                 "sanitization": round(timings['stages']['sanitization'], 2),
                 "validation": round(timings['stages']['validation'], 2),
