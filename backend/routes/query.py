@@ -3,7 +3,7 @@ from pydantic import BaseModel
 import logging
 import re
 import time
-from typing import Optional
+from typing import Optional, List, Dict, Tuple
 
 from services.sql_service import generate_sql
 from db.clickhouse import run_query
@@ -19,6 +19,91 @@ class AskRequest(BaseModel):
     question: str
     model: str = "deepseek-local"
     dataset: Optional[str] = None  # ← NOVO: Suporte a múltiplos datasets
+
+
+def _detect_candidate_datasets(question: str) -> List[str]:
+    """Retorna datasets ordenados por compatibilidade heurística com a pergunta."""
+
+    question_lower = question.lower()
+    keywords_map = {
+        "covid-19-vacinacao": [
+            "vacina", "vacinação", "covid", "doses", "imunização", "aplicadas",
+            "fabricante", "lote", "injeção", "pfizer", "astrazeneca", "dose"
+        ],
+        "leitos": [
+            "leito", "leitos", "hospital", "uti", "capacidade", "cama",
+            "camas", "internação", "estabelecimento", "saúde", "clínica",
+            "ocupação", "disponível"
+        ],
+        "surtos-srag": [
+            "srag", "síndrome respiratória", "respiratória aguda", "febre",
+            "tosse", "dispneia", "falta de ar", "vigilância epidemiológica",
+            "notificação", "sintoma", "sintomas", "grave", "hospitalizado"
+        ],
+        "atencao-basica": [
+            "ubs", "básica", "unidade básica", "posto de saúde",
+            "atenção primária", "cnes", "endereço", "localização", "bairro",
+            "coordenadas", "geolocalização", "ibge"
+        ]
+    }
+
+    scores = []
+    for dataset_id, keywords in keywords_map.items():
+        score = sum(1 for keyword in keywords if keyword in question_lower)
+        if score > 0:
+            scores.append((dataset_id, score))
+
+    scores.sort(key=lambda item: item[1], reverse=True)
+    return [dataset_id for dataset_id, _ in scores]
+
+
+def _build_interoperability_sql(question: str, detected_datasets: List[str]) -> Optional[Tuple[str, List[str]]]:
+    """Monta um SQL de JOIN controlado para perguntas de interoperabilidade conhecidas."""
+
+    q = question.lower()
+    datasets_set = set(detected_datasets)
+
+    if {"surtos-srag", "atencao-basica"}.issubset(datasets_set):
+        if any(word in q for word in ["município", "municipio", "cidade", "ibge"]):
+            sql = """
+            SELECT
+                a.ibge,
+                COUNT(*) AS total_srag,
+                COUNT(DISTINCT a.cnes) AS total_ubs
+            FROM srag s
+            INNER JOIN atencao_basica a ON s.co_mun_not = a.ibge
+            GROUP BY a.ibge
+            ORDER BY total_srag DESC
+            LIMIT 100
+            """.strip()
+            return sql, ["surtos-srag", "atencao-basica"]
+
+        if any(word in q for word in ["estado", "uf", "região", "regiao"]):
+            sql = """
+            SELECT
+                a.uf,
+                COUNT(*) AS total_srag,
+                COUNT(DISTINCT a.ibge) AS municipios_com_ubs,
+                COUNT(DISTINCT a.cnes) AS total_ubs
+            FROM srag s
+            INNER JOIN atencao_basica a ON s.co_mun_not = a.ibge
+            GROUP BY a.uf
+            ORDER BY total_srag DESC
+            LIMIT 100
+            """.strip()
+            return sql, ["surtos-srag", "atencao-basica"]
+
+        sql = """
+        SELECT
+            COUNT(*) AS total_registros_cruzados,
+            COUNT(DISTINCT s.co_mun_not) AS municipios_cruzados,
+            COUNT(DISTINCT a.cnes) AS ubs_relacionadas
+        FROM srag s
+        INNER JOIN atencao_basica a ON s.co_mun_not = a.ibge
+        """.strip()
+        return sql, ["surtos-srag", "atencao-basica"]
+
+    return None
 
 
 def sanitize_sql(sql: str) -> str:
@@ -168,12 +253,75 @@ def ask(req: AskRequest):
     try:
         # Determinar dataset a usar
         dataset_to_use = req.dataset or "covid-19-vacinacao"
+
+        detected_datasets = _detect_candidate_datasets(req.question)
+        join_plan = _build_interoperability_sql(req.question, detected_datasets)
+
+        if join_plan is not None:
+            sql, join_datasets = join_plan
+            logger.info(f"Interoperabilidade detectada automaticamente: {', '.join(join_datasets)}")
+            sanitized_sql = sanitize_sql(sql)
+
+            if not is_valid_sql(sanitized_sql, join_datasets[0]):
+                logger.error(f"SQL de interoperabilidade inválido: {sanitized_sql}")
+                return {
+                    "question": req.question,
+                    "dataset": ",".join(join_datasets),
+                    "sql": sanitized_sql,
+                    "data": {"error": "SQL de interoperabilidade inválido"},
+                    "insight": "Desculpe, não consegui validar a consulta entre bases.",
+                    "success": False
+                }
+
+            stage_start = time.time()
+            logger.info("Executando JOIN interoperável no ClickHouse...")
+            result = run_query(sanitized_sql)
+            time_database = time.time() - stage_start
+            timings["stages"]["database_execution"] = time_database
+
+            if isinstance(result, dict) and "error" in result:
+                logger.error(f"Erro na execução interoperável: {result['error']}")
+                return {
+                    "question": req.question,
+                    "dataset": ",".join(join_datasets),
+                    "sql": sanitized_sql,
+                    "data": result,
+                    "insight": f"Erro ao executar a consulta entre bases: {result.get('message', result['error'])}",
+                    "success": False
+                }
+
+            logger.info(f"JOIN executado com sucesso. Resultado: {len(result)} linhas")
+
+            time_total = time.time() - time_start
+            timings["total_ms"] = round(time_total * 1000, 2)
+
+            print("\n" + "="*70)
+            print(f"⏱️  TIMING REPORT - {req.model.upper()} - INTEROPERABILIDADE")
+            print("="*70)
+            print(f"Pergunta: {req.question[:60]}...")
+            print(f"Datasets: {', '.join(join_datasets)}")
+            print("-"*70)
+            print(f"  Database Execution:          {timings['stages']['database_execution']:>8.2f} s")
+            print(f"  TOTAL:                       {timings['total_ms']/1000:>8.2f} s")
+            print("="*70 + "\n")
+
+            return {
+                "question": req.question,
+                "dataset": ",".join(join_datasets),
+                "sql": sanitized_sql,
+                "data": result,
+                "insight": f"Consulta interoperável executada entre {', '.join(join_datasets)}.",
+                "success": True,
+                "timing_s": {
+                    "database_execution": round(timings['stages']['database_execution'], 2),
+                    "total": round(timings['total_ms']/1000, 2)
+                }
+            }
         
         # Se dataset não foi fornecido, tentar detectar
         if not req.dataset:
-            detected = _detect_dataset_for_question(req.question)
-            if detected:
-                dataset_to_use = detected
+            if detected_datasets:
+                dataset_to_use = detected_datasets[0]
                 logger.info(f"Dataset detectado automaticamente: {dataset_to_use}")
         
         # Carregar metadata do dataset
@@ -333,40 +481,5 @@ def _detect_dataset_for_question(question: str) -> Optional[str]:
     - surtos-srag: Síndrome Respiratória Aguda Grave
     - atencao-basica: Unidades Básicas de Saúde (UBS)
     """
-    question_lower = question.lower()
-    
-    # Mapa de palavras-chave para datasets
-    keywords_map = {
-        "covid-19-vacinacao": [
-            "vacina", "vacinação", "covid", "doses", "imunização", "aplicadas",
-            "fabricante", "lote", "injeção", "pfizer", "astrazeneca", "dose"
-        ],
-        "leitos": [
-            "leito", "leitos", "hospital", "uti", "capacidade", "cama",
-            "camas", "internação", "estabelecimento", "saúde", "clínica",
-            "pronto forro", "pronto-forro", "ocupação", "disponível"
-        ],
-        "surtos-srag": [
-            "srag", "síndrome respiratória", "respiratória aguda", "febre",
-            "tosse", "dispneia", "falta de ar", "vigilância epidemiológica",
-            "notificação", "sintoma", "sintomas", "grave", "hospitalizado"
-        ],
-        "atencao-basica": [
-            "ubs", "básica", "unidade básica", "saúde", "posto de saúde",
-            "atenção primária", "cnes", "endereço", "localização", "bairro",
-            "coordenadas", "geolocalização"
-        ]
-    }
-    
-    # Calcular score para cada dataset
-    scores = {}
-    for dataset_id, keywords in keywords_map.items():
-        score = sum(1 for kw in keywords if kw in question_lower)
-        scores[dataset_id] = score
-    
-    # Retornar dataset com maior score
-    best_dataset = max(scores, key=scores.get)
-    best_score = scores[best_dataset]
-    
-    # Apenas retornar se houver alguma correspondência
-    return best_dataset if best_score > 0 else None
+    detected = _detect_candidate_datasets(question)
+    return detected[0] if detected else None
