@@ -12,6 +12,56 @@ from config.datasets import get_table_name, get_dataset_config
 
 logger = logging.getLogger(__name__)
 
+
+def _get_schema_columns(schema: dict) -> dict:
+    """Retorna o mapa de colunas aceitando os formatos antigo e novo do schema."""
+
+    if not isinstance(schema, dict):
+        return {}
+
+    for key in ("colunas_principais", "columns"):
+        columns = schema.get(key)
+        if isinstance(columns, dict) and columns:
+            return columns
+
+    return {}
+
+
+def _get_schema_value(schema: dict, *keys: str, default=""):
+    """Obtém o primeiro valor não vazio entre chaves alternativas do schema."""
+
+    if not isinstance(schema, dict):
+        return default
+
+    for key in keys:
+        value = schema.get(key)
+        if value not in (None, "", {}, []):
+            return value
+
+    return default
+
+
+def _get_column_text(column_info: dict, *keys: str, default=""):
+    """Obtém o primeiro texto não vazio entre chaves alternativas da coluna."""
+
+    if not isinstance(column_info, dict):
+        return default
+
+    for key in keys:
+        value = column_info.get(key)
+        if value not in (None, "", {}, []):
+            return value
+
+    return default
+
+
+def _format_examples(examples) -> str:
+    if isinstance(examples, list):
+        return ", ".join(str(example) for example in examples)
+    if examples not in (None, "", {}, []):
+        return str(examples)
+    return ""
+
 def extract_sql(text: str) -> str:
     """Extrai SQL da resposta do LLM com múltiplas estratégias"""
     
@@ -150,20 +200,21 @@ def _format_columns_from_schema(schema: dict) -> str:
         String formatada com descrição das colunas
     """
     colunas_info = ""
-    for col_name, col_info in schema.get("colunas_principais", {}).items():
-        tipo = col_info.get("tipo", "String")
-        descricao = col_info.get("descricao", "")
-        exemplos = col_info.get("exemplos", [])
+    for col_name, col_info in _get_schema_columns(schema).items():
+        tipo = _get_column_text(col_info, "tipo", "type", default="String")
+        descricao = _get_column_text(col_info, "descricao", "description", default="")
+        exemplos = _get_column_text(col_info, "exemplos", "examples", "valores_possiveis", default=[])
         
         colunas_info += f"- {col_name} ({tipo}): {descricao}"
-        if exemplos:
-            colunas_info += f" → Exemplos: {', '.join(str(e) for e in exemplos)}"
+        formatted_examples = _format_examples(exemplos)
+        if formatted_examples:
+            colunas_info += f" → Exemplos: {formatted_examples}"
         colunas_info += "\n"
     
     return colunas_info
 
 
-def _generate_examples_for_dataset(dataset: str, schema: dict) -> str:
+def _generate_examples_for_dataset(dataset: str, schema: dict, table_name: str) -> str:
     """
     Gera exemplos SQL específicos para um dataset.
     
@@ -235,18 +286,52 @@ EXEMPLO 7 - UTI por região:
 Pergunta: Qual região tem mais leitos de UTI?
 SELECT REGIAO, SUM(UTI_TOTAL_EXIST) as uti_total FROM leitos GROUP BY REGIAO ORDER BY uti_total DESC
         """,
+        "surtos-srag": """
+EXEMPLO 1 - Total de notificações por UF:
+Pergunta: Quantos casos de SRAG foram notificados por estado?
+SELECT SG_UF_NOT, COUNT(*) as total FROM srag GROUP BY SG_UF_NOT ORDER BY total DESC
+
+EXEMPLO 2 - Casos por ano:
+Pergunta: Qual ano teve mais notificações?
+SELECT year(DT_NOTIFIC) as ano, COUNT(*) as total FROM srag GROUP BY ano ORDER BY total DESC
+
+EXEMPLO 3 - Casos por sexo:
+Pergunta: Qual a distribuição por sexo?
+SELECT CS_SEXO, COUNT(*) as total FROM srag GROUP BY CS_SEXO ORDER BY total DESC
+
+EXEMPLO 4 - Idade média:
+Pergunta: Qual é a idade média dos casos?
+SELECT AVG(NU_IDADE_N) as idade_media FROM srag
+        """,
+        "atencao-basica": """
+EXEMPLO 1 - Total de UBS por UF:
+Pergunta: Quantas UBS existem por estado?
+SELECT UF, COUNT(*) as total FROM atencao_basica GROUP BY UF ORDER BY total DESC
+
+EXEMPLO 2 - UBS por município:
+Pergunta: Quais municípios têm mais UBS?
+SELECT IBGE, COUNT(*) as total FROM atencao_basica GROUP BY IBGE ORDER BY total DESC
+
+EXEMPLO 3 - UBS por bairro:
+Pergunta: Qual é a distribuição de UBS por bairro?
+SELECT BAIRRO, COUNT(*) as total FROM atencao_basica GROUP BY BAIRRO ORDER BY total DESC
+
+EXEMPLO 4 - Coordenadas geográficas:
+Pergunta: Quais UBS têm latitude e longitude válidas?
+SELECT NOME, UF, IBGE, LATITUDE, LONGITUDE FROM atencao_basica WHERE LATITUDE IS NOT NULL AND LONGITUDE IS NOT NULL LIMIT 100
+        """,
     }
     
     # Retorna exemplos específicos se existem, senão um genérico
-    return examples_map.get(dataset, """
+    return examples_map.get(dataset, f"""
 EXEMPLO 1: Contar linhas
-SELECT COUNT(*) FROM {table}
+SELECT COUNT(*) FROM {table_name or 'tabela'}
 
 EXEMPLO 2: Agrupar por coluna
-SELECT coluna1, COUNT(*) as total FROM {table} GROUP BY coluna1 ORDER BY total DESC
+SELECT coluna1, COUNT(*) as total FROM {table_name or 'tabela'} GROUP BY coluna1 ORDER BY total DESC
 
 EXEMPLO 3: Com filtro
-SELECT COUNT(*) FROM {table} WHERE coluna1 = 'valor'
+SELECT COUNT(*) FROM {table_name or 'tabela'} WHERE coluna1 = 'valor'
     """)
 
 
@@ -298,6 +383,29 @@ REGRAS OBRIGATÓRIAS PARA LEITOS:
 16. NUNCA use COUNT(*) para contar leitos - sempre use SUM() em colunas de capacidade
 17. Use LIMIT 100 para resultados grandes
         """,
+    "surtos-srag": """
+REGRAS OBRIGATÓRIAS PARA SRAG:
+1. Se perguntar por estado/UF, use SG_UF_NOT
+2. Se perguntar por município de notificação, use CO_MUN_NOT
+3. Se perguntar por sexo, use CS_SEXO
+4. Se perguntar por idade, use NU_IDADE_N
+5. Se perguntar por notificação ou período, use DT_NOTIFIC
+6. Se perguntar por início dos sintomas, use DT_SIN_PRI
+7. Para séries temporais, agregue por year(), month() ou week() sobre DT_NOTIFIC
+8. Para distribuição por categoria, use GROUP BY com COUNT(*)
+9. Não assuma nomes de municípios quando a base só tiver código IBGE
+    """,
+    "atencao-basica": """
+REGRAS OBRIGATÓRIAS PARA ATENÇÃO BÁSICA:
+1. Se perguntar por quantidade de UBS, use COUNT(*)
+2. Se perguntar por estado, use UF
+3. Se perguntar por município, use IBGE
+4. Se perguntar por nome da unidade, use NOME
+5. Se perguntar por bairro, use BAIRRO
+6. Se perguntar por geolocalização, use LATITUDE e LONGITUDE
+7. Não use SUM() para contar unidades; use COUNT(*)
+8. Para resultados grandes, use LIMIT 100
+    """,
     }
     
     # Retorna regras específicas se existem
@@ -339,9 +447,12 @@ def generate_sql(question, metadata, model_name, dataset: str = "covid-19-vacina
     
     # FIXO: Formatar colunas do schema dinamicamente
     colunas_info = _format_columns_from_schema(schema_info)
+    schema_columns = _get_schema_columns(schema_info)
+    schema_description = _get_schema_value(schema_info, "descricao", "description", default="N/A")
+    schema_source = _get_schema_value(schema_info, "fonte", "source", default="N/A")
     
     # FIXO: Gerar exemplos específicos do dataset
-    examples = _generate_examples_for_dataset(dataset, schema_info)
+    examples = _generate_examples_for_dataset(dataset, schema_info, table_name)
     
     # FIXO: Gerar regras específicas do dataset
     dataset_rules = _get_sql_rules_for_dataset(dataset, schema_info)
@@ -357,7 +468,7 @@ def generate_sql(question, metadata, model_name, dataset: str = "covid-19-vacina
 TAREFA: Gerar COUNT(*) para: {question}
 
 TABELA: {table_name}
-COLUNAS: {', '.join(schema_info.get('colunas_principais', {}).keys())}
+COLUNAS: {', '.join(schema_columns.keys())}
 
 REGRA ABSOLUTA: Para "quantas/quantos" → SEMPRE use COUNT(*)
 
@@ -391,8 +502,8 @@ PADRÕES IMPORTANTES:
 
 DATASET: {dataset}
 Tabela: {table_name}
-Descrição: {schema_info.get('descricao', 'N/A')}
-Fonte: {schema_info.get('fonte', 'N/A')}
+Descrição: {schema_description}
+Fonte: {schema_source}
 
 Colunas disponíveis:
 {colunas_info}
@@ -494,6 +605,40 @@ def fallback_sql(question: str, dataset: str = "covid-19-vacinacao") -> str:
             "estabelecimento": "NOME_ESTABELECIMENTO",
             "hospital": "NOME_ESTABELECIMENTO",
         },
+        "surtos-srag": {
+            "estado": "SG_UF_NOT",
+            "uf": "SG_UF_NOT",
+            "sexo": "CS_SEXO",
+            "idade": "NU_IDADE_N",
+            "idade_n": "NU_IDADE_N",
+            "notificacao": "DT_NOTIFIC",
+            "notificacoes": "DT_NOTIFIC",
+            "data": "DT_NOTIFIC",
+            "ano": "DT_NOTIFIC",
+            "anos": "DT_NOTIFIC",
+            "mes": "DT_NOTIFIC",
+            "mês": "DT_NOTIFIC",
+            "meses": "DT_NOTIFIC",
+            "semana": "DT_NOTIFIC",
+            "semanas": "DT_NOTIFIC",
+            "sintoma": "DT_SIN_PRI",
+            "sintomas": "DT_SIN_PRI",
+            "municipio": "CO_MUN_NOT",
+            "município": "CO_MUN_NOT",
+        },
+        "atencao-basica": {
+            "estado": "UF",
+            "uf": "UF",
+            "municipio": "IBGE",
+            "município": "IBGE",
+            "cidade": "IBGE",
+            "bairro": "BAIRRO",
+            "nome": "NOME",
+            "ubs": "NOME",
+            "cnes": "CNES",
+            "latitude": "LATITUDE",
+            "longitude": "LONGITUDE",
+        },
     }
     
     current_mappings = column_mappings.get(dataset, {})
@@ -502,8 +647,50 @@ def fallback_sql(question: str, dataset: str = "covid-19-vacinacao") -> str:
         "dengue-2024": "estado_uf",
         "influenza-2025": "estado_uf",
         "leitos": "UF",
+        "surtos-srag": "SG_UF_NOT",
+        "atencao-basica": "UF",
     }
     groupby_col = groupby_columns.get(dataset, "estado")
+
+    state_columns = {
+        "covid-19-vacinacao": "paciente_endereco_uf",
+        "leitos": "UF",
+        "surtos-srag": "SG_UF_NOT",
+        "atencao-basica": "UF",
+    }
+    state_col = state_columns.get(dataset, "estado")
+
+    state_code_aliases = {
+        "atencao-basica": {
+            "AC": "12",
+            "AL": "27",
+            "AP": "16",
+            "AM": "13",
+            "BA": "29",
+            "CE": "23",
+            "DF": "53",
+            "ES": "32",
+            "GO": "52",
+            "MA": "21",
+            "MT": "51",
+            "MS": "50",
+            "MG": "31",
+            "PA": "15",
+            "PB": "25",
+            "PR": "41",
+            "PE": "26",
+            "PI": "22",
+            "RJ": "33",
+            "RN": "24",
+            "RS": "43",
+            "RO": "11",
+            "RR": "14",
+            "SC": "42",
+            "SP": "35",
+            "SE": "28",
+            "TO": "17",
+        }
+    }
     
     # ========== DETECTAR SE PERGUNTA BUSCA MENOR ("menor", "mínimo") vs MAIOR ==========
     is_asking_for_min = any(word in q for word in ["menor", "mínimo", "minima", "lowest", "least"])
@@ -575,8 +762,12 @@ def fallback_sql(question: str, dataset: str = "covid-19-vacinacao") -> str:
                 date_columns = {
                     "covid-19-vacinacao": "vacina_dataAplicacao",
                     "leitos": "COMP",
+                    "surtos-srag": "DT_NOTIFIC",
                 }
-                date_col = date_columns.get(dataset, "data")
+                date_col = date_columns.get(dataset)
+
+                if not date_col:
+                    continue
                 
                 logger.debug(f"Padrão detectado: Período '{period_word}' de {date_col} → {func_name}()")
                 sql = f"SELECT {func_name}({date_col}) as {alias}, COUNT(*) as total FROM {table_name} GROUP BY {alias} {order_by_clause} LIMIT 100"
@@ -602,9 +793,15 @@ def fallback_sql(question: str, dataset: str = "covid-19-vacinacao") -> str:
                     sql = f"SELECT {sql_func}({col_name}) as resultado FROM {table_name}"
                     return sql
             # Se não achou coluna específica, tentar idade como default
-            logger.debug(f"Padrão detectado: '{stat_type}' com default idade")
-            sql = f"SELECT {sql_func}(paciente_idade) as resultado FROM {table_name}"
-            return sql
+            default_stat_columns = {
+                "covid-19-vacinacao": "paciente_idade",
+                "surtos-srag": "NU_IDADE_N",
+            }
+            default_stat_col = default_stat_columns.get(dataset)
+            if default_stat_col:
+                logger.debug(f"Padrão detectado: '{stat_type}' com default {default_stat_col}")
+                sql = f"SELECT {sql_func}({default_stat_col}) as resultado FROM {table_name}"
+                return sql
     
     # ========== DETECTAR PADRÃO: "Quais ... têm" → Listar registros com filtro ==========
     # Exemplo: "Quais cidades têm UTI neonatal?"
@@ -675,8 +872,9 @@ def fallback_sql(question: str, dataset: str = "covid-19-vacinacao") -> str:
         
         # Se encontrou estado, adicionar WHERE; senão usar COUNT simples
         if estado_code:
-            sql = f"SELECT COUNT(*) as total FROM {table_name} WHERE paciente_endereco_uf = '{estado_code}' LIMIT 10000"
-            logger.debug(f"Estado '{estado_code}' extraído → WHERE paciente_endereco_uf = '{estado_code}'")
+            mapped_state_code = state_code_aliases.get(dataset, {}).get(estado_code, estado_code)
+            sql = f"SELECT COUNT(*) as total FROM {table_name} WHERE {state_col} = '{mapped_state_code}' LIMIT 10000"
+            logger.debug(f"Estado '{estado_code}' extraído → WHERE {state_col} = '{mapped_state_code}'")
         else:
             sql = f"SELECT COUNT(*) as total FROM {table_name} LIMIT 10000"
             logger.debug("Nenhum estado extraído, usando COUNT simples")
