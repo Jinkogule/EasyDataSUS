@@ -297,7 +297,7 @@ LIMIT 100
         allowed_pairs = self._allowed_join_pairs(relationships)
         selected_columns = self._allowed_columns_by_dataset(selected_datasets)
         selected_columns_lower = {column.lower() for column in selected_columns}
-        output_aliases = self._extract_output_aliases(parsed)
+        output_aliases = {alias.lower() for alias in self._extract_output_aliases(parsed)}
 
         for column_ref in self._extract_column_references(parsed):
             column_name = column_ref["column"]
@@ -307,7 +307,11 @@ LIMIT 100
                 continue
 
             if table_alias and table_alias.lower() in alias_to_table:
-                if column_name.lower() not in self._allowed_columns_for_table(alias_to_table[table_alias.lower()]).keys():
+                allowed_columns = {
+                    allowed_column.lower()
+                    for allowed_column in self._allowed_columns_for_table(alias_to_table[table_alias.lower()]).keys()
+                }
+                if column_name.lower() not in allowed_columns:
                     return SqlValidationResult(False, physical_tables, joins, list(cte_names), [f"Coluna não autorizada: {table_alias}.{column_name}"])
                 continue
 
@@ -324,6 +328,14 @@ LIMIT 100
             return SqlValidationResult(False, physical_tables, joins, list(cte_names), ["Consulta multibase sem JOIN reconhecível"])
 
         for join_node in join_nodes:
+            for relationship in relationships:
+                if relationship.requires_preaggregation and set(selected_datasets) == {relationship.source_dataset, relationship.target_dataset}:
+                    if isinstance(join_node.this, exp.Table):
+                        joined_table_name = join_node.this.name.lower()
+                        physical_table_names = {get_table_name(dataset).lower() for dataset in selected_datasets}
+                        if joined_table_name in physical_table_names:
+                            return SqlValidationResult(False, physical_tables, joins, list(cte_names), ["Relacionamento exige pré-agregação antes do JOIN"])
+
             on_expression = join_node.args.get("on")
             if on_expression is None:
                 return SqlValidationResult(False, physical_tables, joins, list(cte_names), ["JOIN sem condição ON não é permitido"])
@@ -333,11 +345,6 @@ LIMIT 100
             join_text = on_expression.sql(dialect="clickhouse")
             joins.append(join_text)
             normalized = self._normalize_join_condition(join_text)
-
-            for relationship in relationships:
-                if relationship.requires_preaggregation and set(selected_datasets) == {relationship.source_dataset, relationship.target_dataset}:
-                    if self._contains_direct_join_on_physical_tables(sql_clean, relationship):
-                        return SqlValidationResult(False, physical_tables, joins, list(cte_names), ["Relacionamento exige pré-agregação antes do JOIN"])
 
             if self._is_preaggregated_srag_ubs_query(sql_clean, selected_datasets, normalized):
                 continue
@@ -404,17 +411,6 @@ LIMIT 100
         return any(isinstance(node, tuple(forbidden_classes)) for node in parsed.walk())
 
     @staticmethod
-    def _contains_direct_join_on_physical_tables(sql: str, relationship: Relationship) -> bool:
-        sql_lower = sql.lower()
-        source_table = relationship.source_table.lower()
-        target_table = relationship.target_table.lower()
-        source_column = relationship.source_column.lower()
-        target_column = relationship.target_column.lower()
-
-        direct_join_pattern = rf"from\s+{source_table}\s+[a-z]\s+inner\s+join\s+{target_table}\s+[a-z]\s+on\s+[^\n]*{source_column}\s*=\s*[^\n]*{target_column}"
-        reverse_direct_join_pattern = rf"from\s+{target_table}\s+[a-z]\s+inner\s+join\s+{source_table}\s+[a-z]\s+on\s+[^\n]*{target_column}\s*=\s*[^\n]*{source_column}"
-        return bool(re.search(direct_join_pattern, sql_lower, re.IGNORECASE | re.DOTALL) or re.search(reverse_direct_join_pattern, sql_lower, re.IGNORECASE | re.DOTALL))
-
     @staticmethod
     def _normalize_join_condition(join_text: str) -> str:
         normalized = re.sub(r"\b[a-zA-Z_][\w]*\.", "", join_text.lower())
@@ -429,21 +425,13 @@ LIMIT 100
             return False
 
         sql_lower = sql.lower()
-        if "srag_by_municipality" not in sql_lower or "ubs_by_municipality" not in sql_lower:
-            return False
-
         if "count(*) as total_srag" not in sql_lower:
             return False
 
         if "count(distinct cnes) as total_ubs" not in sql_lower and "count(distinct a.cnes) as total_ubs" not in sql_lower:
             return False
 
-        canonical_join = "s.ibge = u.ibge"
-        canonical_join_alt = "s.ibge=u.ibge"
-        if canonical_join not in sql_lower and canonical_join_alt not in sql_lower:
-            return False
-
-        return normalized_join in {"ibge=ibge", "co_mun_not=ibge", "ibge=co_mun_not"}
+        return normalized_join == "ibge=ibge"
 
     @staticmethod
     def _extract_tables_with_regex(sql: str, cte_names: Optional[Sequence[str]] = None) -> List[str]:
