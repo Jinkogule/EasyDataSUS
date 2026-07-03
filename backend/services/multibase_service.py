@@ -14,9 +14,10 @@ logger = logging.getLogger(__name__)
 
 try:
     from sqlglot import exp, parse_one
-except Exception:  # pragma: no cover - optional dependency
-    exp = None
-    parse_one = None
+except Exception as exc:  # pragma: no cover - fail closed when dependency is missing
+    raise RuntimeError(
+        "sqlglot is required for multibase SQL validation. Install backend requirements before running the application."
+    ) from exc
 
 
 @dataclass(frozen=True)
@@ -268,71 +269,83 @@ LIMIT 100
         if re.search(r"--|/\*|\*/", sql_clean):
             return SqlValidationResult(False, [], [], [], ["Comentários não são permitidos"])
 
-        if parse_one is not None and exp is not None:
-            try:
-                parsed = parse_one(sql_clean, read="clickhouse")
-            except Exception as exc:
-                return SqlValidationResult(False, [], [], [], [f"Falha ao parsear SQL: {exc}"])
+        try:
+            parsed = parse_one(sql_clean, read="clickhouse")
+        except Exception as exc:
+            return SqlValidationResult(False, [], [], [], [f"Falha ao parsear SQL: {exc}"])
 
-            if not isinstance(parsed, (exp.Select, exp.With)):
-                return SqlValidationResult(False, [], [], [], ["A consulta deve começar com SELECT ou WITH seguido de SELECT"])
+        if not isinstance(parsed, (exp.Select, exp.With)):
+            return SqlValidationResult(False, [], [], [], ["A consulta deve começar com SELECT ou WITH seguido de SELECT"])
 
-            cte_names = {cte.alias_or_name for cte in parsed.find_all(exp.CTE)} if hasattr(parsed, "find_all") else set()
-            table_nodes = [node for node in parsed.find_all(exp.Table)]
-            physical_tables = []
-            for table_node in table_nodes:
-                table_name = table_node.name
-                if table_name not in cte_names:
-                    physical_tables.append(table_name)
+        cte_names = {cte.alias_or_name for cte in parsed.find_all(exp.CTE)} if hasattr(parsed, "find_all") else set()
+        table_nodes = [node for node in parsed.find_all(exp.Table)]
+        physical_tables = []
+        alias_to_table = {}
+        for table_node in table_nodes:
+            table_name = table_node.name
+            table_alias = table_node.alias_or_name
+            if table_name not in cte_names:
+                physical_tables.append(table_name)
+                alias_to_table[table_alias.lower()] = table_name
 
-            allowed_tables = {get_table_name(dataset) for dataset in selected_datasets}
-            invalid_tables = [table for table in physical_tables if table not in allowed_tables]
-            if invalid_tables:
-                return SqlValidationResult(False, physical_tables, [], list(cte_names), [f"Tabelas não autorizadas: {', '.join(invalid_tables)}"])
-
-            joins = []
-            allowed_pairs = self._allowed_join_pairs(relationships)
-            for join_node in parsed.find_all(exp.Join):
-                on_expression = join_node.args.get("on")
-                if on_expression is None:
-                    return SqlValidationResult(False, physical_tables, joins, list(cte_names), ["JOIN sem condição ON não é permitido"])
-                if join_node.args.get("kind") and str(join_node.args.get("kind")).upper() == "CROSS":
-                    return SqlValidationResult(False, physical_tables, joins, list(cte_names), ["CROSS JOIN não autorizado"])
-
-                join_text = on_expression.sql(dialect="clickhouse")
-                joins.append(join_text)
-
-                normalized = self._normalize_join_condition(join_text)
-                if self._is_preaggregated_srag_ubs_query(sql_clean, selected_datasets, normalized):
-                    continue
-                if normalized not in allowed_pairs:
-                    return SqlValidationResult(False, physical_tables, joins, list(cte_names), [f"JOIN não autorizado: {join_text}"])
-
-            return SqlValidationResult(True, physical_tables, joins, list(cte_names), [])
-
-        cte_names = self._extract_cte_names_with_regex(sql_clean)
-        tables = self._extract_tables_with_regex(sql_clean, cte_names)
-        joins = self._extract_joins_with_regex(sql_clean)
         allowed_tables = {get_table_name(dataset) for dataset in selected_datasets}
-        invalid_tables = [table for table in tables if table not in allowed_tables]
+        invalid_tables = [table for table in physical_tables if table not in allowed_tables]
         if invalid_tables:
-            return SqlValidationResult(False, tables, joins, [], [f"Tabelas não autorizadas: {', '.join(invalid_tables)}"])
+            return SqlValidationResult(False, physical_tables, [], list(cte_names), [f"Tabelas não autorizadas: {', '.join(invalid_tables)}"])
 
+        joins = []
         allowed_pairs = self._allowed_join_pairs(relationships)
-        for join_text in joins:
+        selected_columns = self._allowed_columns_by_dataset(selected_datasets)
+        selected_columns_lower = {column.lower() for column in selected_columns}
+        output_aliases = self._extract_output_aliases(parsed)
+
+        for column_ref in self._extract_column_references(parsed):
+            column_name = column_ref["column"]
+            table_alias = column_ref.get("table")
+
+            if table_alias and table_alias.lower() in cte_names:
+                continue
+
+            if table_alias and table_alias.lower() in alias_to_table:
+                if column_name.lower() not in self._allowed_columns_for_table(alias_to_table[table_alias.lower()]).keys():
+                    return SqlValidationResult(False, physical_tables, joins, list(cte_names), [f"Coluna não autorizada: {table_alias}.{column_name}"])
+                continue
+
+            if column_name.lower() in selected_columns_lower or column_name in output_aliases:
+                continue
+
+            return SqlValidationResult(False, physical_tables, joins, list(cte_names), [f"Coluna não autorizada: {column_name}"])
+
+        if self._contains_write_operation(parsed):
+            return SqlValidationResult(False, physical_tables, joins, list(cte_names), ["Comando de escrita não permitido"])
+
+        join_nodes = list(parsed.find_all(exp.Join))
+        if len(selected_datasets) > 1 and not join_nodes:
+            return SqlValidationResult(False, physical_tables, joins, list(cte_names), ["Consulta multibase sem JOIN reconhecível"])
+
+        for join_node in join_nodes:
+            on_expression = join_node.args.get("on")
+            if on_expression is None:
+                return SqlValidationResult(False, physical_tables, joins, list(cte_names), ["JOIN sem condição ON não é permitido"])
+            if join_node.args.get("kind") and str(join_node.args.get("kind")).upper() == "CROSS":
+                return SqlValidationResult(False, physical_tables, joins, list(cte_names), ["CROSS JOIN não autorizado"])
+
+            join_text = on_expression.sql(dialect="clickhouse")
+            joins.append(join_text)
             normalized = self._normalize_join_condition(join_text)
+
+            for relationship in relationships:
+                if relationship.requires_preaggregation and set(selected_datasets) == {relationship.source_dataset, relationship.target_dataset}:
+                    if self._contains_direct_join_on_physical_tables(sql_clean, relationship):
+                        return SqlValidationResult(False, physical_tables, joins, list(cte_names), ["Relacionamento exige pré-agregação antes do JOIN"])
+
             if self._is_preaggregated_srag_ubs_query(sql_clean, selected_datasets, normalized):
                 continue
+
             if normalized not in allowed_pairs:
-                return SqlValidationResult(False, tables, joins, [], [f"JOIN não autorizado: {join_text}"])
+                return SqlValidationResult(False, physical_tables, joins, list(cte_names), [f"JOIN não autorizado: {join_text}"])
 
-        if self._is_preaggregated_srag_ubs_query(sql_clean, selected_datasets, "ibge=ibge"):
-            return SqlValidationResult(True, tables, joins, [], [])
-
-        if len(selected_datasets) > 1 and not joins:
-            return SqlValidationResult(False, tables, joins, [], ["Consulta multibase sem JOIN reconhecível"])
-
-        return SqlValidationResult(True, tables, joins, [], [])
+        return SqlValidationResult(True, physical_tables, joins, list(cte_names), [])
 
     def _allowed_join_pairs(self, relationships: Sequence[Relationship]) -> List[str]:
         allowed_pairs = []
@@ -340,6 +353,67 @@ LIMIT 100
             allowed_pairs.append(f"{relationship.source_column}={relationship.target_column}")
             allowed_pairs.append(f"{relationship.target_column}={relationship.source_column}")
         return allowed_pairs
+
+    def _allowed_columns_by_dataset(self, selected_datasets: Sequence[str]) -> List[str]:
+        allowed_columns = []
+        for dataset_id in selected_datasets:
+            allowed_columns.extend(self._allowed_columns_for_table(get_table_name(dataset_id)).keys())
+        return allowed_columns
+
+    @staticmethod
+    def _allowed_columns_for_table(table_name: str) -> Dict[str, dict]:
+        table_to_dataset = {get_table_name(dataset_id): dataset_id for dataset_id in DATASETS_CONFIG.keys()}
+        dataset_id = table_to_dataset.get(table_name)
+        if not dataset_id:
+            return {}
+        metadata = json.loads(load_metadata(dataset_id))
+        schema_columns = metadata.get("colunas_principais") or metadata.get("columns") or {}
+        return schema_columns if isinstance(schema_columns, dict) else {}
+
+    @staticmethod
+    def _extract_column_references(parsed) -> List[Dict[str, Optional[str]]]:
+        column_names = []
+        for column_node in parsed.find_all(exp.Column):
+            column_name = column_node.name
+            if column_name:
+                table_name = column_node.table or None
+                column_names.append({"table": table_name, "column": column_name})
+        return column_names
+
+    @staticmethod
+    def _extract_output_aliases(parsed) -> List[str]:
+        aliases = []
+        for alias_node in parsed.find_all(exp.Alias):
+            alias_name = alias_node.alias
+            if alias_name:
+                aliases.append(alias_name)
+        return aliases
+
+    @staticmethod
+    def _contains_write_operation(parsed) -> bool:
+        forbidden_names = ["Insert", "Update", "Delete", "Drop", "Create", "Alter", "Truncate"]
+        forbidden_classes = []
+        for class_name in forbidden_names:
+            expression_class = getattr(exp, class_name, None)
+            if expression_class is not None:
+                forbidden_classes.append(expression_class)
+
+        if not forbidden_classes:
+            return False
+
+        return any(isinstance(node, tuple(forbidden_classes)) for node in parsed.walk())
+
+    @staticmethod
+    def _contains_direct_join_on_physical_tables(sql: str, relationship: Relationship) -> bool:
+        sql_lower = sql.lower()
+        source_table = relationship.source_table.lower()
+        target_table = relationship.target_table.lower()
+        source_column = relationship.source_column.lower()
+        target_column = relationship.target_column.lower()
+
+        direct_join_pattern = rf"from\s+{source_table}\s+[a-z]\s+inner\s+join\s+{target_table}\s+[a-z]\s+on\s+[^\n]*{source_column}\s*=\s*[^\n]*{target_column}"
+        reverse_direct_join_pattern = rf"from\s+{target_table}\s+[a-z]\s+inner\s+join\s+{source_table}\s+[a-z]\s+on\s+[^\n]*{target_column}\s*=\s*[^\n]*{source_column}"
+        return bool(re.search(direct_join_pattern, sql_lower, re.IGNORECASE | re.DOTALL) or re.search(reverse_direct_join_pattern, sql_lower, re.IGNORECASE | re.DOTALL))
 
     @staticmethod
     def _normalize_join_condition(join_text: str) -> str:

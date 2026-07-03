@@ -311,12 +311,12 @@ def ask(req: AskRequest):
             selection = multibase_service.select_datasets(
                 req.question,
                 req.model,
-                detected_datasets or list(DATASETS_CONFIG.keys()),
+                list(DATASETS_CONFIG.keys()),
             )
             timings["stages"]["dataset_selection"] = time.time() - stage_start
 
             selected_datasets = selection.datasets or (detected_datasets[:1] if detected_datasets else [dataset_to_use])
-            cross_dataset = selection.cross_dataset and len(selected_datasets) > 1
+            cross_dataset = len(selected_datasets) > 1
             routing_mode = selection.routing_mode
 
             if cross_dataset:
