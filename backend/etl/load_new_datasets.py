@@ -8,6 +8,7 @@ Processa CSVs em chunks para otimizar memória
 
 import pandas as pd
 import logging
+import os
 from pathlib import Path
 from datetime import datetime
 import sys
@@ -29,7 +30,7 @@ except ImportError:
 class ClickHouseLoader:
     """Carregador de dados para ClickHouse com suporte a chunks"""
     
-    def __init__(self, host='localhost', port=9000, database='default', user='admin', password='admin'):
+    def __init__(self, host='localhost', port=9000, database='default', user=None, password=None):
         """
         Inicializa conexão com ClickHouse
         
@@ -40,6 +41,9 @@ class ClickHouseLoader:
             user: Usuário ClickHouse
             password: Senha ClickHouse
         """
+        user = user or os.getenv('CLICKHOUSE_ADMIN_USER', 'easydatasus_admin')
+        password = password or os.getenv('CLICKHOUSE_ADMIN_PASSWORD', 'easydatasus_admin')
+
         try:
             self.client = Client(host, port=port, database=database, user=user, password=password)
             self.client.execute("SELECT 1")
@@ -88,7 +92,10 @@ class ClickHouseLoader:
         from datetime import date as date_type
         default_date = date_type(1900, 1, 1)
         
-        date_cols = ['dt_notific', 'dt_sin_pri', 'dt_nasc', 'dt_interna', 'dt_coleta', 'dt_evoluca']
+        date_cols = [
+            'dt_notific', 'dt_sin_pri', 'dt_nasc', 'dt_interna', 'dt_coleta',
+            'dt_evoluca', 'dose_1_cov', 'dose_2_cov'
+        ]
         for col in date_cols:
             if col in df.columns:
                 df[col] = pd.to_datetime(df[col], errors='coerce')
@@ -108,7 +115,7 @@ class ClickHouseLoader:
         int32_cols = [col for col in df.columns if col.startswith(('co_', 'cs_', 'sem_', 'nu_idade')) or col in 
                    ['febre', 'tosse', 'garganta', 'dispneia', 'diarreia', 'vomito',
                     'cardiopati', 'diabetes', 'asma', 'pneumopati', 'imunodepre', 'renal',
-                    'obesidade', 'hospital', 'uti', 'amostra', 'pcr_resul', 'pos_pcrflu',
+                    'obesidade', 'hospital', 'uti', 'amostra', 'pcr_resul', 'pos_pcrflu', 'tp_idade',
                     'tp_flu_pcr', 'pcr_vsr', 'pcr_sars2', 'classi_fin', 'evolucao', 'vacina_cov']]
         
         for col in int32_cols:
@@ -119,18 +126,20 @@ class ClickHouseLoader:
                 df[col] = df[col].astype('int32')
         
         # Converter strings
-        str_cols = ['sg_uf_not', 'cs_sexo']
+        str_cols = ['sg_uf_not', 'sg_uf', 'cs_sexo']
         for col in str_cols:
             if col in df.columns:
                 df[col] = df[col].astype(str)
         
         # Preparar columnas para inserção (apenas as que existem na tabela)
-        columns = ['nu_notific', 'dt_notific', 'sem_not', 'dt_sin_pri', 'sg_uf_not', 'co_mun_not',
-                   'cs_sexo', 'dt_nasc', 'nu_idade_n', 'febre', 'tosse', 'garganta', 'dispneia',
+        columns = ['nu_notific', 'dt_notific', 'sem_not', 'sem_pri', 'dt_sin_pri', 'sg_uf_not',
+                   'sg_uf', 'co_mun_not', 'co_mun_res', 'cs_sexo', 'dt_nasc', 'nu_idade_n',
+                   'tp_idade', 'febre', 'tosse', 'garganta', 'dispneia',
                    'diarreia', 'vomito', 'cardiopati', 'diabetes', 'asma', 'pneumopati',
                    'imunodepre', 'renal', 'obesidade', 'hospital', 'dt_interna', 'co_mu_inte',
                    'uti', 'amostra', 'dt_coleta', 'pcr_resul', 'pos_pcrflu', 'tp_flu_pcr',
-                   'pcr_vsr', 'pcr_sars2', 'classi_fin', 'evolucao', 'dt_evoluca', 'vacina_cov']
+                   'pcr_vsr', 'pcr_sars2', 'classi_fin', 'evolucao', 'dt_evoluca', 'vacina_cov',
+                   'dose_1_cov', 'dose_2_cov']
         
         # Filtrar apenas colunas que existem no dataframe
         available_cols = [col for col in columns if col in df.columns]
