@@ -132,6 +132,8 @@ docker exec easydatasus-ollama ollama run deepseek-coder:6.7b-base-q4_K_M "Hello
 5. **Load dataset and start**
 ```bash
 python etl/load_csv.py
+# Replaces and reloads every configured dataset.
+# Use --dataset leitos to replace only the hospital-beds table.
 python main.py
 ```
 

@@ -1,15 +1,15 @@
 # Dataset: Vacinação COVID-19
 
 ## Descrição
-Dados de vacinação COVID-19 dos estados de Acre (AC) e Espírito Santo (ES).
+Recorte local de registros de vacinação contra a COVID-19 utilizado pelo protótipo.
 
 ## Arquivos
-- `vacinacao-ac-es.csv` - 390.911+ registros de aplicação de vacinas
+- `vacinacao-covid.csv` - arquivo utilizado pela configuração atual
 
 ## Formato
 - **Delimitador**: Ponto-e-vírgula (`;`)
 - **Encoding**: UTF-8
-- **Linhas**: 390.911 registros (AC + ES)
+- **Linhas**: aproximadamente 390 mil registros no recorte atual
 - **Colunas**: 32 (correspondentes ao schema.json em metadata/)
 
 ## Carregamento
@@ -19,7 +19,7 @@ from etl.load_csv import load_csv
 # Carrega dados deste dataset
 load_csv(dataset="covid-19-vacinacao")
 
-# Ou use o padrão (covid-19-vacinacao é o default)
+# Sem argumento, limpa e recarrega todos os datasets configurados
 load_csv()
 ```
 
@@ -40,5 +40,6 @@ data/datasets/
 ```
 
 ## Truncamento Automático
-A função `load_csv()` automaticamente executará TRUNCATE TABLE vacinacao 
-ANTES de carregar novos dados, evitando duplicações.
+A função `load_csv()` sem argumentos substitui os dados de todas as tabelas
+configuradas. Use `load_csv(dataset="covid-19-vacinacao")` para substituir
+somente a tabela de vacinação.

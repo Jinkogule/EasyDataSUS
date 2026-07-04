@@ -2,7 +2,7 @@ import json
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from config.datasets import DATASETS_CONFIG, get_table_name
 from metadata.loader import load_metadata
@@ -26,6 +26,12 @@ class Relationship:
     target_granularity: str
     cardinality: str
     requires_preaggregation: bool
+    analytical_notes: str = ""
+    source_temporal_column: str = ""
+    target_temporal_column: str = ""
+    use_latest_target_period: bool = False
+    limitation_keywords: Tuple[str, ...] = ()
+    result_notes: Tuple[str, ...] = ()
 
 
 class RelationshipService:
@@ -60,6 +66,12 @@ class RelationshipService:
                 target_granularity=item.get("target_granularity", ""),
                 cardinality=item.get("cardinality", ""),
                 requires_preaggregation=bool(item.get("requires_preaggregation", False)),
+                analytical_notes=item.get("analytical_notes", ""),
+                source_temporal_column=item.get("source_temporal_column", ""),
+                target_temporal_column=item.get("target_temporal_column", ""),
+                use_latest_target_period=bool(item.get("use_latest_target_period", False)),
+                limitation_keywords=tuple(item.get("limitation_keywords", [])),
+                result_notes=tuple(item.get("result_notes", [])),
             )
             self._validate_relationship(relationship)
             relationships.append(relationship)
@@ -90,6 +102,10 @@ class RelationshipService:
             raise ValueError(f"Coluna de origem inexistente: {relationship.source_column}")
         if relationship.target_column.lower() not in target_lookup:
             raise ValueError(f"Coluna de destino inexistente: {relationship.target_column}")
+        if relationship.source_temporal_column and relationship.source_temporal_column.lower() not in source_lookup:
+            raise ValueError(f"Coluna temporal de origem inexistente: {relationship.source_temporal_column}")
+        if relationship.target_temporal_column and relationship.target_temporal_column.lower() not in target_lookup:
+            raise ValueError(f"Coluna temporal de destino inexistente: {relationship.target_temporal_column}")
 
     @staticmethod
     def _schema_columns(metadata: dict) -> Dict[str, dict]:

@@ -1,6 +1,8 @@
 import json
 import logging
+import os
 import re
+import unicodedata
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Sequence, Tuple
 
@@ -48,6 +50,19 @@ class MultibaseService:
         if not candidates:
             candidates = list(DATASETS_CONFIG.keys())
 
+        keyword_selection = self._detect_keyword_datasets(question, candidates)
+        if keyword_selection:
+            return DatasetSelection(
+                datasets=keyword_selection,
+                cross_dataset=len(keyword_selection) > 1,
+                reason="Domínio(s) explicitamente identificado(s) na pergunta",
+                routing_mode=(
+                    "heuristic_multi_dataset"
+                    if len(keyword_selection) > 1
+                    else "heuristic_single_dataset"
+                ),
+            )
+
         prompt_lines = [
             "Selecione um ou mais datasets para a pergunta abaixo.",
             "Responda SOMENTE com JSON válido no formato:",
@@ -67,13 +82,33 @@ class MultibaseService:
             )
 
         prompt_lines.append("")
-        prompt_lines.append("Exemplos mínimos de intenção:")
-        prompt_lines.append("- SRAG + UBS: comparar notificações com cobertura territorial/assistencial")
-        prompt_lines.append("- Vacinação + Leitos: analisar cobertura versus capacidade hospitalar")
+        prompt_lines.append("Relacionamentos interdomínio disponíveis:")
+        available_relationships = [
+            relationship
+            for relationship in self.relationship_service.list_relationships()
+            if relationship.source_dataset in candidates and relationship.target_dataset in candidates
+        ]
+        if available_relationships:
+            for relationship in available_relationships:
+                prompt_lines.append(
+                    f"- {relationship.source_dataset} <-> {relationship.target_dataset}: "
+                    f"{relationship.description}"
+                )
+        else:
+            prompt_lines.append("- Nenhum relacionamento interdomínio cadastrado.")
+        prompt_lines.append("Selecione todos os datasets exigidos pela pergunta, mesmo quando ainda não houver relacionamento cadastrado entre eles.")
+        prompt_lines.append("Não omita um domínio necessário apenas para transformar a pergunta em consulta monobase.")
 
         try:
             llm = get_llm(model_name)
-            response = llm.generate("\n".join(prompt_lines))
+            response = llm.generate(
+                "\n".join(prompt_lines),
+                response_format="json",
+                num_predict=160,
+                temperature=0.0,
+                timeout_s=int(os.getenv("OLLAMA_ROUTING_TIMEOUT", "30")),
+                max_retries=1,
+            )
             parsed = self._parse_selection_response(response, candidates)
             if parsed:
                 return parsed
@@ -121,21 +156,44 @@ class MultibaseService:
         )
 
     def _fallback_selection(self, question: str, candidate_datasets: Sequence[str]) -> List[str]:
-        q = question.lower()
+        detected = self._detect_keyword_datasets(question, candidate_datasets)
+        return detected if detected else [candidate_datasets[0]]
+
+    @staticmethod
+    def _normalize_question_text(value: str) -> str:
+        normalized = unicodedata.normalize("NFKD", value.lower())
+        without_accents = "".join(char for char in normalized if not unicodedata.combining(char))
+        return re.sub(r"\s+", " ", without_accents).strip()
+
+    @classmethod
+    def _detect_keyword_datasets(cls, question: str, candidate_datasets: Sequence[str]) -> List[str]:
+        q = cls._normalize_question_text(question)
         detected = []
         keyword_map = {
-            "covid-19-vacinacao": ["vacina", "vacinação", "covid", "dose", "pfizer", "astrazeneca"],
-            "leitos": ["leito", "leitos", "uti", "hospital", "capacidade"],
-            "surtos-srag": ["srag", "febre", "tosse", "dispneia", "notificação"],
-            "atencao-basica": ["ubs", "atenção primária", "cnes", "bairro", "ibge"],
+            "covid-19-vacinacao": [
+                "vacina", "vacinacao", "covid", "dose", "doses", "imunizacao",
+                "pfizer", "astrazeneca",
+            ],
+            "leitos": [
+                "leito", "leitos", "uti", "hospital", "hospitais", "capacidade",
+                "cama", "camas",
+            ],
+            "surtos-srag": [
+                "srag", "sindrome respiratoria", "febre", "tosse", "dispneia",
+                "notificacao", "notificacoes", "vigilancia epidemiologica",
+            ],
+            "atencao-basica": [
+                "ubs", "unidade basica", "unidades basicas", "atencao basica",
+                "atencao primaria", "posto de saude", "postos de saude",
+                "saude da familia", "cnes", "bairro", "ibge",
+            ],
         }
 
         for dataset_id in candidate_datasets:
-            keywords = keyword_map.get(dataset_id, [])
-            if sum(1 for keyword in keywords if keyword in q) > 0:
+            if any(keyword in q for keyword in keyword_map.get(dataset_id, [])):
                 detected.append(dataset_id)
 
-        return detected[:2] if detected else [candidate_datasets[0]]
+        return detected
 
     def build_multibase_context(self, datasets: Sequence[str], relationships: Sequence[Relationship]) -> Dict[str, object]:
         metadata_by_dataset = {}
@@ -184,6 +242,13 @@ class MultibaseService:
                     f"- {relationship.id}: {relationship.source_table}.{relationship.source_column} = {relationship.target_table}.{relationship.target_column} | "
                     f"cardinalidade {relationship.cardinality} | pré-agregação {relationship.requires_preaggregation}"
                 )
+                if relationship.analytical_notes:
+                    prompt_parts.append(f"  Restrição analítica: {relationship.analytical_notes}")
+                if relationship.use_latest_target_period and relationship.target_temporal_column:
+                    prompt_parts.append(
+                        f"  Regra temporal: filtre {relationship.target_table}.{relationship.target_temporal_column} "
+                        f"pela maior competência disponível antes de agregar."
+                    )
         else:
             prompt_parts.append("- Nenhum relacionamento autorizado encontrado.")
 
@@ -210,11 +275,26 @@ class MultibaseService:
         if not relationships:
             return None, "no_relationship"
 
+        if os.getenv("SQL_GENERATION_STRATEGY", "deterministic_first").lower() == "deterministic_first":
+            deterministic_sql = self.build_deterministic_fallback_sql(
+                selected_datasets,
+                relationships,
+                question,
+            )
+            if deterministic_sql:
+                return deterministic_sql, "deterministic_rule"
+
         prompt = self.build_multibase_prompt(question, selected_datasets, relationships)
         llm = get_llm(model_name)
 
         try:
-            response = llm.generate(prompt)
+            response = llm.generate(
+                prompt,
+                num_predict=int(os.getenv("OLLAMA_SQL_NUM_PREDICT", "512")),
+                temperature=0.0,
+                timeout_s=int(os.getenv("OLLAMA_SQL_TIMEOUT", "60")),
+                max_retries=1,
+            )
         except Exception as exc:
             logger.warning(f"Falha ao gerar SQL multibase via LLM: {exc}")
             return None, "llm_error"
@@ -231,6 +311,45 @@ class MultibaseService:
         relationships: Sequence[Relationship],
         question: str = "",
     ) -> Optional[str]:
+        if set(selected_datasets) == {"covid-19-vacinacao", "leitos"} and relationships:
+            relationship = next(
+                (item for item in relationships if item.id == "vacinacao_leitos_uf"),
+                None,
+            )
+            if relationship and relationship.requires_preaggregation:
+                return f"""
+WITH
+vaccination_by_state AS (
+    SELECT
+        {relationship.source_column} AS uf,
+        COUNT(*) AS total_doses
+    FROM {relationship.source_table}
+    WHERE {relationship.source_column} != ''
+    GROUP BY {relationship.source_column}
+),
+beds_by_state AS (
+    SELECT
+        {relationship.target_column} AS uf,
+        SUM(UTI_TOTAL_EXIST) AS total_uti_beds
+    FROM {relationship.target_table}
+    WHERE {relationship.target_column} != ''
+      AND {relationship.target_temporal_column} = (
+          SELECT MAX({relationship.target_temporal_column})
+          FROM {relationship.target_table}
+      )
+    GROUP BY {relationship.target_column}
+)
+SELECT
+    v.uf,
+    v.total_doses,
+    b.total_uti_beds
+FROM vaccination_by_state AS v
+INNER JOIN beds_by_state AS b
+    ON v.uf = b.uf
+ORDER BY v.total_doses DESC, b.total_uti_beds DESC
+LIMIT 100
+""".strip()
+
         if set(selected_datasets) == {"surtos-srag", "atencao-basica"} and relationships:
             relationship = relationships[0]
             if relationship.requires_preaggregation:
@@ -241,6 +360,16 @@ class MultibaseService:
                     or "em quantos municípios" in question_lower
                     or "em quantos municipios" in question_lower
                 )
+                requested_limit_match = re.search(
+                    r"\b(?:top|primeiros?|primeiras?)\s+(\d{1,3})\b",
+                    question_lower,
+                )
+                if requested_limit_match:
+                    result_limit = min(max(int(requested_limit_match.group(1)), 1), 100)
+                elif any(term in question_lower for term in ("maior", "maiores", "mais notificações", "ranking")):
+                    result_limit = 10
+                else:
+                    result_limit = 100
                 if asks_municipality_count:
                     return f"""
 WITH
@@ -282,10 +411,59 @@ FROM srag_by_municipality AS s
 INNER JOIN ubs_by_municipality AS u
     ON s.ibge = u.ibge
 ORDER BY s.total_srag DESC
-LIMIT 100
+LIMIT {result_limit}
 """.strip()
 
         return None
+
+    def canonicalize_sql_identifiers(self, sql: str, selected_datasets: Sequence[str]) -> str:
+        """Reescreve tabelas e colunas com a grafia física configurada."""
+
+        parsed = parse_one(sql, read="clickhouse")
+        cte_names = {cte.alias_or_name.lower() for cte in parsed.find_all(exp.CTE)}
+        allowed_tables = {
+            get_table_name(dataset).lower(): get_table_name(dataset)
+            for dataset in selected_datasets
+        }
+        alias_to_table: Dict[str, str] = {}
+
+        for table_node in parsed.find_all(exp.Table):
+            table_name_lower = table_node.name.lower()
+            if table_name_lower in cte_names:
+                continue
+            canonical_table = allowed_tables.get(table_name_lower)
+            if canonical_table:
+                table_node.set("this", exp.to_identifier(canonical_table))
+                alias_to_table[table_node.alias_or_name.lower()] = canonical_table
+
+        table_columns = {
+            table_name: {
+                column_name.lower(): column_name
+                for column_name in self._allowed_columns_for_table(table_name)
+            }
+            for table_name in allowed_tables.values()
+        }
+
+        for column_node in parsed.find_all(exp.Column):
+            column_lower = column_node.name.lower()
+            table_alias = (column_node.table or "").lower()
+            canonical = None
+
+            if table_alias in alias_to_table:
+                canonical = table_columns.get(alias_to_table[table_alias], {}).get(column_lower)
+            elif not table_alias:
+                matches = {
+                    columns[column_lower]
+                    for columns in table_columns.values()
+                    if column_lower in columns
+                }
+                if len(matches) == 1:
+                    canonical = matches.pop()
+
+            if canonical:
+                column_node.set("this", exp.to_identifier(canonical))
+
+        return parsed.sql(dialect="clickhouse")
 
     def validate_sql(self, sql: str, selected_datasets: Sequence[str], relationships: Sequence[Relationship]) -> SqlValidationResult:
         if not sql:
@@ -316,6 +494,8 @@ LIMIT 100
             if table_name not in cte_names:
                 physical_tables.append(table_name)
                 alias_to_table[table_alias.lower()] = table_name
+
+        physical_tables = list(dict.fromkeys(physical_tables))
 
         allowed_tables = {get_table_name(dataset) for dataset in selected_datasets}
         invalid_tables = [table for table in physical_tables if table not in allowed_tables]
@@ -417,7 +597,11 @@ LIMIT 100
             return {}
         metadata = json.loads(load_metadata(dataset_id))
         schema_columns = metadata.get("colunas_principais") or metadata.get("columns") or {}
-        return schema_columns if isinstance(schema_columns, dict) else {}
+        if not isinstance(schema_columns, dict):
+            return {}
+        if DATASETS_CONFIG[dataset_id].get("physical_column_case") == "lower":
+            return {column_name.lower(): column_info for column_name, column_info in schema_columns.items()}
+        return schema_columns
 
     @staticmethod
     def _extract_column_references(parsed) -> List[Dict[str, Optional[str]]]:

@@ -10,6 +10,11 @@ from db.clickhouse import run_query
 from services.interpretation_service import interpret_result
 from services.multibase_service import multibase_service
 from services.relationship_service import relationship_service
+from services.result_formatter import (
+    build_factual_summary,
+    is_low_information_interpretation,
+    should_use_deterministic_interpretation,
+)
 from metadata.loader import load_metadata, get_available_datasets, get_metadata_by_dataset
 from config.datasets import DATASETS_CONFIG
 
@@ -23,40 +28,46 @@ class AskRequest(BaseModel):
     dataset: Optional[str] = None  # ← NOVO: Suporte a múltiplos datasets
 
 
+def _error_response(
+    question: str,
+    datasets: List[str],
+    message: str,
+    insight: str,
+    routing_mode: str = "unknown",
+    sql_generation_mode: str = "none",
+    relationships: Optional[List[str]] = None,
+    validation: Optional[Dict[str, object]] = None,
+    sql: Optional[str] = None,
+) -> Dict[str, object]:
+    """Mantém o mesmo contrato básico de resposta em todos os erros."""
+
+    selected = datasets or ["unknown"]
+    return {
+        "question": question,
+        "dataset": ",".join(selected),
+        "datasets": selected,
+        "cross_dataset": len(selected) > 1,
+        "relationships": relationships or [],
+        "routing_mode": routing_mode,
+        "sql_generation_mode": sql_generation_mode,
+        "llm_sql_attempted": sql_generation_mode in {"llm", "deterministic_fallback"},
+        "validation": validation or {"valid": False, "tables": [], "joins": [], "errors": []},
+        "sql": sql,
+        "data": {"error": message},
+        "insight": insight,
+        "factual_summary": "",
+        "interpretation_mode": "none",
+        "success": False,
+    }
+
+
 def _detect_candidate_datasets(question: str) -> List[str]:
     """Retorna datasets ordenados por compatibilidade heurística com a pergunta."""
 
-    question_lower = question.lower()
-    keywords_map = {
-        "covid-19-vacinacao": [
-            "vacina", "vacinação", "covid", "doses", "imunização", "aplicadas",
-            "fabricante", "lote", "injeção", "pfizer", "astrazeneca", "dose"
-        ],
-        "leitos": [
-            "leito", "leitos", "hospital", "uti", "capacidade", "cama",
-            "camas", "internação", "estabelecimento", "saúde", "clínica",
-            "ocupação", "disponível"
-        ],
-        "surtos-srag": [
-            "srag", "síndrome respiratória", "respiratória aguda", "febre",
-            "tosse", "dispneia", "falta de ar", "vigilância epidemiológica",
-            "notificação", "sintoma", "sintomas", "grave", "hospitalizado"
-        ],
-        "atencao-basica": [
-            "ubs", "básica", "unidade básica", "posto de saúde",
-            "atenção primária", "cnes", "endereço", "localização", "bairro",
-            "coordenadas", "geolocalização", "ibge"
-        ]
-    }
-
-    scores = []
-    for dataset_id, keywords in keywords_map.items():
-        score = sum(1 for keyword in keywords if keyword in question_lower)
-        if score > 0:
-            scores.append((dataset_id, score))
-
-    scores.sort(key=lambda item: item[1], reverse=True)
-    return [dataset_id for dataset_id, _ in scores]
+    return multibase_service._detect_keyword_datasets(
+        question,
+        list(DATASETS_CONFIG.keys()),
+    )
 
 
 def _build_interoperability_fallback_sql(question: str, detected_datasets: List[str]) -> Optional[Tuple[str, List[str]]]:
@@ -179,7 +190,10 @@ def sanitize_sql(sql: str) -> str:
     sql = re.sub(r"\bCURRENT_DATE\b", "today()", sql, flags=re.IGNORECASE)
     
     # Garantir que LIMIT existe se não houver GROUP BY (segurança)
-    if "GROUP BY" not in sql.upper() and "LIMIT" not in sql.upper():
+    has_scalar_aggregate = bool(
+        re.search(r"\b(?:COUNT|SUM|AVG|MIN|MAX|MEDIAN|STDDEV)\s*\(", sql, re.IGNORECASE)
+    ) and "GROUP BY" not in sql.upper()
+    if "GROUP BY" not in sql.upper() and "LIMIT" not in sql.upper() and not has_scalar_aggregate:
         if not re.search(r"LIMIT\s+\d+", sql, re.IGNORECASE):
             sql = sql.rstrip() + " LIMIT 10000"
     
@@ -340,6 +354,24 @@ def ask(req: AskRequest):
                     }
 
                 relationships_used = [relationship.id for relationship in relationships]
+                question_lower = req.question.lower()
+                analytical_limitations = [
+                    DATASETS_CONFIG[dataset].get("data_scope_note")
+                    for dataset in selected_datasets
+                    if DATASETS_CONFIG[dataset].get("data_scope_note")
+                ]
+                analytical_limitations.extend([
+                    relationship.analytical_notes
+                    for relationship in relationships
+                    if relationship.analytical_notes
+                    and relationship.limitation_keywords
+                    and any(keyword.lower() in question_lower for keyword in relationship.limitation_keywords)
+                ])
+                analytical_limitations.extend(
+                    note
+                    for relationship in relationships
+                    for note in relationship.result_notes
+                )
 
                 stage_start = time.time()
                 multibase_context = multibase_service.build_multibase_context(selected_datasets, relationships)
@@ -379,6 +411,10 @@ def ask(req: AskRequest):
 
                 stage_start = time.time()
                 sql = sanitize_sql(raw_sql)
+                try:
+                    sql = multibase_service.canonicalize_sql_identifiers(sql, selected_datasets)
+                except Exception as exc:
+                    logger.warning("Não foi possível canonicalizar a SQL multibase: %s", exc)
                 validation_result = multibase_service.validate_sql(sql, selected_datasets, relationships)
                 timings["stages"]["validation"] = time.time() - stage_start
 
@@ -390,6 +426,7 @@ def ask(req: AskRequest):
                     )
                     if fallback_sql:
                         sql = sanitize_sql(fallback_sql)
+                        sql = multibase_service.canonicalize_sql_identifiers(sql, selected_datasets)
                         validation_result = multibase_service.validate_sql(sql, selected_datasets, relationships)
                         sql_generation_mode = "deterministic_fallback"
                     if not validation_result.valid:
@@ -441,7 +478,27 @@ def ask(req: AskRequest):
                     }
 
                 stage_start = time.time()
-                insight = interpret_result(req.question, result, req.model, dataset=",".join(selected_datasets))
+                factual_summary = build_factual_summary(sql, result, req.question)
+                if (
+                    sql_generation_mode == "deterministic_fallback"
+                    or should_use_deterministic_interpretation(req.question, factual_summary)
+                ):
+                    insight = factual_summary
+                    interpretation_mode = "deterministic_factual"
+                else:
+                    insight = interpret_result(
+                        req.question,
+                        result,
+                        req.model,
+                        dataset=",".join(selected_datasets),
+                        factual_summary=factual_summary,
+                    )
+                    interpretation_mode = "llm_grounded"
+                    if is_low_information_interpretation(insight, factual_summary):
+                        insight = factual_summary
+                        interpretation_mode = "deterministic_fallback"
+                if analytical_limitations:
+                    insight = f"Limitação analítica: {' '.join(analytical_limitations)} {insight}"
                 timings["stages"]["interpretation"] = time.time() - stage_start
 
                 time_total = time.time() - time_start
@@ -453,18 +510,28 @@ def ask(req: AskRequest):
                     "datasets": selected_datasets,
                     "cross_dataset": True,
                     "relationships": relationships_used,
+                    "analytical_limitations": analytical_limitations,
                     "routing_mode": routing_mode,
                     "sql_generation_mode": sql_generation_mode,
+                    "llm_sql_attempted": sql_generation_mode in {"llm", "deterministic_fallback"},
                     "validation": validation_payload,
                     "sql": sql,
                     "data": result,
                     "insight": insight,
+                    "factual_summary": factual_summary,
+                    "interpretation_mode": interpretation_mode,
                     "success": True,
                     "timing_s": {
                         "dataset_selection": round(timings["stages"].get("dataset_selection", 0), 2),
                         "relationship_lookup": round(timings["stages"].get("relationship_lookup", 0), 2),
                         "context_construction": round(timings["stages"].get("context_construction", 0), 2),
-                        "sql_generation_llm": round(timings["stages"].get("sql_generation", 0), 2),
+                        "sql_generation": round(timings["stages"].get("sql_generation", 0), 2),
+                        "sql_generation_llm": round(
+                            timings["stages"].get("sql_generation", 0)
+                            if sql_generation_mode in {"llm", "deterministic_fallback"}
+                            else 0,
+                            2,
+                        ),
                         "validation": round(timings["stages"].get("validation", 0), 2),
                         "database_execution": round(timings["stages"].get("database_execution", 0), 2),
                         "interpretation_llm": round(timings["stages"].get("interpretation", 0), 2),
@@ -482,32 +549,37 @@ def ask(req: AskRequest):
             logger.info(f"Metadata carregado para dataset: {dataset_to_use}")
         except FileNotFoundError:
             logger.error(f"Dataset error - Dataset não encontrado: {dataset_to_use}")
-            return {
-                "question": req.question,
-                "dataset": dataset_to_use,
-                "sql": None,
-                "data": {"error": f"Dataset '{dataset_to_use}' não encontrado"},
-                "insight": f"Desculpe, o dataset '{dataset_to_use}' não está disponível.",
-                "success": False
-            }
+            return _error_response(
+                req.question,
+                [dataset_to_use],
+                f"Dataset '{dataset_to_use}' não encontrado",
+                f"Desculpe, o dataset '{dataset_to_use}' não está disponível.",
+                routing_mode=routing_mode,
+            )
         
         # ========== 1. GERAR SQL COM LLM ==========
         stage_start = time.time()
         logger.info("Gerando SQL...")
-        raw_sql = generate_sql(req.question, metadata, req.model, dataset_to_use)
+        raw_sql, sql_generation_mode = generate_sql(
+            req.question,
+            metadata,
+            req.model,
+            dataset_to_use,
+            return_mode=True,
+        )
         time_sql_generation = time.time() - stage_start
         timings["stages"]["sql_generation"] = time_sql_generation
         
         if not raw_sql:
             logger.error("Falha ao gerar SQL")
-            return {
-                "question": req.question,
-                "dataset": dataset_to_use,
-                "sql": None,
-                "data": {"error": "Não foi possível gerar uma consulta válida"},
-                "insight": "Desculpe, não consegui entender sua pergunta.",
-                "success": False
-            }
+            return _error_response(
+                req.question,
+                [dataset_to_use],
+                "Não foi possível gerar uma consulta válida",
+                "Desculpe, não consegui entender sua pergunta.",
+                routing_mode=routing_mode,
+                sql_generation_mode=sql_generation_mode,
+            )
         
         logger.debug(f"SQL gerado (raw): {raw_sql}")
         
@@ -515,6 +587,10 @@ def ask(req: AskRequest):
         stage_start = time.time()
         logger.info("Sanitizando SQL...")
         sql = sanitize_sql(raw_sql)
+        try:
+            sql = multibase_service.canonicalize_sql_identifiers(sql, [dataset_to_use])
+        except Exception as exc:
+            logger.warning("Não foi possível canonicalizar os identificadores SQL: %s", exc)
         time_sanitization = time.time() - stage_start
         timings["stages"]["sanitization"] = time_sanitization
         logger.debug(f"SQL sanitizado: {sql}")
@@ -522,16 +598,25 @@ def ask(req: AskRequest):
         # ========== 3. VALIDAR ==========
         stage_start = time.time()
         logger.info("Validando SQL...")
-        if not is_valid_sql(sql, dataset_to_use):
+        single_validation = multibase_service.validate_sql(sql, [dataset_to_use], [])
+        validation_payload = {
+            "valid": single_validation.valid,
+            "tables": single_validation.tables,
+            "joins": single_validation.joins,
+            "errors": single_validation.errors,
+        }
+        if not single_validation.valid:
             logger.error(f"SQL inválido: {sql}")
-            return {
-                "question": req.question,
-                "dataset": dataset_to_use,
-                "sql": raw_sql,
-                "data": {"error": "SQL inválido foi rejeitada"},
-                "insight": "Desculpe, a consulta gerada não é válida para este banco de dados.",
-                "success": False
-            }
+            return _error_response(
+                req.question,
+                [dataset_to_use],
+                "SQL inválido foi rejeitado",
+                "Desculpe, a consulta gerada não é válida para este banco de dados.",
+                routing_mode=routing_mode,
+                sql_generation_mode=sql_generation_mode,
+                validation=validation_payload,
+                sql=raw_sql,
+            )
         time_validation = time.time() - stage_start
         timings["stages"]["validation"] = time_validation
         
@@ -545,21 +630,38 @@ def ask(req: AskRequest):
         # Verificar se houve erro
         if isinstance(result, dict) and "error" in result:
             logger.error(f"Erro na execução: {result['error']}")
-            return {
-                "question": req.question,
-                "dataset": dataset_to_use,
-                "sql": sql,
-                "data": result,
-                "insight": f"Erro ao executar a consulta: {result.get('message', result['error'])}",
-                "success": False
-            }
+            return _error_response(
+                req.question,
+                [dataset_to_use],
+                result.get("message", result["error"]),
+                f"Erro ao executar a consulta: {result.get('message', result['error'])}",
+                routing_mode=routing_mode,
+                sql_generation_mode=sql_generation_mode,
+                validation=validation_payload,
+                sql=sql,
+            )
         
         logger.info(f"Query executada com sucesso. Resultado: {len(result)} linhas")
         
         # ========== 5. INTERPRETAR RESULTADO COM LLM ==========
         stage_start = time.time()
         logger.info("Interpretando resultado...")
-        insight = interpret_result(req.question, result, req.model, dataset=dataset_to_use)
+        factual_summary = build_factual_summary(sql, result, req.question)
+        if should_use_deterministic_interpretation(req.question, factual_summary):
+            insight = factual_summary
+            interpretation_mode = "deterministic_factual"
+        else:
+            insight = interpret_result(
+                req.question,
+                result,
+                req.model,
+                dataset=dataset_to_use,
+                factual_summary=factual_summary,
+            )
+            interpretation_mode = "llm_grounded"
+            if is_low_information_interpretation(insight, factual_summary):
+                insight = factual_summary
+                interpretation_mode = "deterministic_fallback"
         time_interpretation = time.time() - stage_start
         timings["stages"]["interpretation"] = time_interpretation
         
@@ -574,11 +676,11 @@ def ask(req: AskRequest):
         print(f"Pergunta: {req.question[:60]}...")
         print(f"Dataset: {dataset_to_use}")
         print("-"*70)
-        print(f"  SQL Generation (LLM):        {timings['stages']['sql_generation']:>8.2f} s")
+        print(f"  SQL Generation ({sql_generation_mode}): {timings['stages']['sql_generation']:>8.2f} s")
         print(f"  SQL Sanitization:            {timings['stages']['sanitization']:>8.2f} s")
         print(f"  SQL Validation:              {timings['stages']['validation']:>8.2f} s")
         print(f"  Database Execution:          {timings['stages']['database_execution']:>8.2f} s")
-        print(f"  Result Interpretation (LLM): {timings['stages']['interpretation']:>8.2f} s")
+        print(f"  Result Interpretation ({interpretation_mode}): {timings['stages']['interpretation']:>8.2f} s")
         print("-"*70)
         print(f"  TOTAL:                       {timings['total_ms']/1000:>8.2f} s")
         print("="*70 + "\n")
@@ -597,23 +699,28 @@ def ask(req: AskRequest):
             "datasets": [dataset_to_use],
             "cross_dataset": False,
             "relationships": [],
-            "routing_mode": "single_dataset",
-            "sql_generation_mode": "llm",
-            "validation": {
-                "valid": True,
-                "tables": [DATASETS_CONFIG.get(dataset_to_use, {}).get("table_name", dataset_to_use)],
-                "joins": [],
-                "errors": [],
-            },
+            "analytical_limitations": [
+                DATASETS_CONFIG[dataset_to_use]["data_scope_note"]
+            ] if DATASETS_CONFIG.get(dataset_to_use, {}).get("data_scope_note") else [],
+            "routing_mode": routing_mode,
+            "sql_generation_mode": sql_generation_mode,
+            "llm_sql_attempted": sql_generation_mode in {"llm", "deterministic_fallback"},
+            "validation": validation_payload,
             "sql": sql,
             "data": result,
             "insight": insight,
+            "factual_summary": factual_summary,
+            "interpretation_mode": interpretation_mode,
             "success": True,
             "timing_s": {
                 "dataset_selection": round(timings['stages'].get('dataset_selection', 0), 2),
                 "relationship_lookup": round(timings['stages'].get('relationship_lookup', 0), 2),
                 "context_construction": round(timings['stages'].get('context_construction', 0), 2),
-                "sql_generation_llm": round(timings['stages']['sql_generation'], 2),
+                "sql_generation": round(timings['stages']['sql_generation'], 2),
+                "sql_generation_llm": round(
+                    timings['stages']['sql_generation'] if sql_generation_mode in {"llm", "deterministic_fallback"} else 0,
+                    2,
+                ),
                 "sanitization": round(timings['stages']['sanitization'], 2),
                 "validation": round(timings['stages']['validation'], 2),
                 "database_execution": round(timings['stages']['database_execution'], 2),
@@ -624,14 +731,16 @@ def ask(req: AskRequest):
     
     except Exception as e:
         logger.exception(f"Erro inesperado: {e}")
-        return {
-            "question": req.question,
-            "dataset": req.dataset or "unknown",
-            "sql": None,
-            "data": {"error": str(e)},
-            "insight": "Desculpe, ocorreu um erro inesperado ao processar sua pergunta.",
-            "success": False
-        }
+        return _error_response(
+            req.question,
+            selected_datasets if "selected_datasets" in locals() else [req.dataset or "unknown"],
+            str(e),
+            "Desculpe, ocorreu um erro inesperado ao processar sua pergunta.",
+            routing_mode=routing_mode if "routing_mode" in locals() else "unknown",
+            sql_generation_mode=sql_generation_mode if "sql_generation_mode" in locals() else "none",
+            relationships=relationships_used if "relationships_used" in locals() else [],
+            validation=validation_payload if "validation_payload" in locals() else None,
+        )
 
 
 def _detect_dataset_for_question(question: str) -> Optional[str]:

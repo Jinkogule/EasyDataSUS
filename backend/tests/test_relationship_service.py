@@ -23,6 +23,18 @@ class RelationshipServiceTests(unittest.TestCase):
         self.assertEqual(relationship.target_column, "ibge")
         self.assertTrue(relationship.requires_preaggregation)
 
+    def test_finds_vaccination_beds_relationship(self):
+        relationship = self.service.find_direct_relationship("covid-19-vacinacao", "leitos")
+        self.assertIsNotNone(relationship)
+        self.assertEqual(relationship.source_column, "paciente_endereco_uf")
+        self.assertEqual(relationship.target_column, "UF")
+        self.assertEqual(relationship.common_dimension, "state")
+        self.assertTrue(relationship.requires_preaggregation)
+        self.assertIn("denominador populacional", relationship.analytical_notes)
+        self.assertEqual("COMP", relationship.target_temporal_column)
+        self.assertTrue(relationship.use_latest_target_period)
+        self.assertIn("cobertura", relationship.limitation_keywords)
+
     def test_build_context_returns_relationships(self):
         context = self.service.build_context(["surtos-srag", "atencao-basica"])
         self.assertIn("relationships", context)

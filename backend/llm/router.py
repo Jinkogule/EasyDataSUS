@@ -1,32 +1,48 @@
+import os
+
 from llm.ollama_provider import OllamaProvider
 
 # Mapeamento de nomes amigáveis para modelos Ollama
 MODELS = {
     "deepseek-local": {
-        "model": "deepseek-coder:6.7b-base-q4_K_M",
-        "description": "DeepSeek Coder 6.7B - Otimizado para SQL e código",
-        "size": "4.1GB",
-        "params": "6.7B"
+        "model_env": "OLLAMA_MODEL",
+        "default_model": "deepseek-coder:6.7b-base-q4_K_M",
+        "description": "DeepSeek Coder local configurado por OLLAMA_MODEL",
     },
     "neural-local": {
-        "model": "neural-chat",
+        "default_model": "neural-chat",
         "description": "Neural Chat 7B - Melhor para português natural",
         "size": "4.7GB",
         "params": "7B"
     },
     "mistral-local": {
-        "model": "mistral",
+        "default_model": "mistral",
         "description": "Mistral 7B - Rápido, preciso e equilibrado",
         "size": "4GB",
         "params": "7B"
     },
     "orca-local": {
-        "model": "orca-mini",
+        "default_model": "orca-mini",
         "description": "Orca Mini 3B - Muito leve e rápido",
         "size": "2GB",
         "params": "3B"
     },
 }
+
+
+def get_model_identifier(model_name: str = "deepseek-local") -> str:
+    """Resolve o identificador Ollama, incluindo sobrescritas do ambiente."""
+    if model_name not in MODELS:
+        model_name = "deepseek-local"
+
+    config = MODELS[model_name]
+    environment_variable = config.get("model_env")
+    if environment_variable:
+        configured_model = os.getenv(environment_variable, "").strip()
+        if configured_model:
+            return configured_model
+
+    return config["default_model"]
 
 def get_available_models():
     """Retorna lista de modelos disponíveis"""
@@ -47,6 +63,5 @@ def get_llm(model_name: str = "deepseek-local"):
         print(f"Modelo '{model_name}' desconhecido. Usando 'deepseek-local'")
         model_name = "deepseek-local"
     
-    ollama_model = MODELS[model_name]["model"]
+    ollama_model = get_model_identifier(model_name)
     return OllamaProvider(ollama_model, model_name)
-    

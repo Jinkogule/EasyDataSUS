@@ -9,12 +9,16 @@ Inclui: Vacinação COVID-19, Leitos, SRAG, Atenção Básica
 DATASETS_CONFIG = {
     "covid-19-vacinacao": {
         "table_name": "vacinacao",
-        "description": "Vacinação COVID-19 no Brasil",
+        "description": "Recorte local de registros de vacinação COVID-19",
         "name": "Campanha Nacional de Vacinação COVID-19",
         "schema_path": "backend/metadata/datasets/covid-19-vacinacao/schema.json",
         "csv_path": "backend/data/datasets/covid-19-vacinacao/vacinacao-covid.csv",
         "objetivo_estrategico": "OE 3.6.1",
         "dominio": "Imunização",
+        "data_scope_note": (
+            "O arquivo de vacinação carregado é um recorte local e sua distribuição por UF "
+            "não deve ser interpretada como representativa de todo o Brasil."
+        ),
         "status": "implementado",
     },
     "leitos": {
@@ -35,6 +39,7 @@ DATASETS_CONFIG = {
         "csv_path": "backend/data/datasets/surtos-srag/INFLUD26-18-05-2026.csv",
         "objetivo_estrategico": "OE 9.1",
         "dominio": "Vigilância Epidemiológica",
+        "physical_column_case": "lower",
         "status": "implementado",
     },
     "atencao-basica": {
@@ -45,6 +50,7 @@ DATASETS_CONFIG = {
         "csv_path": "backend/data/datasets/atencao-basica/Unidades_Basicas_Saude-UBS.csv",
         "objetivo_estrategico": "OE 3.6.1, OE 7.2/7.3",
         "dominio": "Atenção Primária",
+        "physical_column_case": "lower",
         "status": "implementado",
     },
 }

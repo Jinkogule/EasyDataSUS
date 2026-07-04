@@ -3,7 +3,7 @@ CREATE TABLE IF NOT EXISTS vacinacao (
     document_id String,
     paciente_id String,
     paciente_idade Int32,
-    paciente_dataNascimento Nullable(Date),
+    paciente_dataNascimento Nullable(Date32),
     paciente_enumSexoBiologico Nullable(String),
     paciente_racaCor_codigo Nullable(String),
     paciente_racaCor_valor Nullable(String),
