@@ -1,13 +1,13 @@
 -- Script para criar/recriar TODAS as tabelas do EasyDataSUS
--- Execução: docker exec easydatasus-clickhouse-1 clickhouse-client < init_all_tables.sql
+-- Execução manual: docker exec -i easydatasus-clickhouse clickhouse-client < init_all_tables.sql
 
 -- ============================================================================
 -- 1. TABELA: COVID-19 VACINAÇÃO
 -- ============================================================================
 
-DROP TABLE IF EXISTS covid_vacinacao;
+DROP TABLE IF EXISTS vacinacao;
 
-CREATE TABLE covid_vacinacao (
+CREATE TABLE vacinacao (
     document_id String,
     paciente_id String,
     paciente_idade Int32,
@@ -44,10 +44,10 @@ CREATE TABLE covid_vacinacao (
 ORDER BY (paciente_endereco_uf, paciente_id)
 PARTITION BY toYYYYMM(vacina_dataAplicacao);
 
-ALTER TABLE covid_vacinacao ADD INDEX idx_uf paciente_endereco_uf TYPE set(0);
-ALTER TABLE covid_vacinacao ADD INDEX idx_municipio paciente_endereco_nmMunicipio TYPE set(0);
-ALTER TABLE covid_vacinacao ADD INDEX idx_data vacina_dataAplicacao TYPE set(0);
-ALTER TABLE covid_vacinacao ADD INDEX idx_vacina vacina_nome TYPE set(0);
+ALTER TABLE vacinacao ADD INDEX idx_uf paciente_endereco_uf TYPE set(0);
+ALTER TABLE vacinacao ADD INDEX idx_municipio paciente_endereco_nmMunicipio TYPE set(0);
+ALTER TABLE vacinacao ADD INDEX idx_data vacina_dataAplicacao TYPE set(0);
+ALTER TABLE vacinacao ADD INDEX idx_vacina vacina_nome TYPE set(0);
 
 -- ============================================================================
 -- 2. TABELA: LEITOS
@@ -109,14 +109,23 @@ CREATE TABLE srag (
     nu_notific Int64,
     dt_notific Date,
     sem_not Int32,
+    sem_pri Nullable(Int32),
+    dt_sin_pri Nullable(Date),
     sg_uf_not String,
+    sg_uf Nullable(String),
     co_mun_not Int32,
+    co_mun_res Nullable(Int32),
+    nu_idade_n Nullable(Int32),
+    tp_idade Nullable(Int32),
+    cs_sexo Nullable(String),
+    dt_nasc Nullable(Date),
     id_municip Int32,
     co_regiao Int32,
     classi_fin Int32,
     evolucao Int32,
     dt_evoluca Nullable(Date),
     dt_interna Nullable(Date),
+    co_mu_inte Nullable(Int32),
     dt_encerra Nullable(Date),
     dt_digita Nullable(Date),
     dt_notif Nullable(Date),
@@ -141,6 +150,8 @@ CREATE TABLE srag (
     obesidade Int32,
     hospital Int32,
     uti Int32,
+    amostra Nullable(Int32),
+    dt_coleta Nullable(Date),
     suport_ven Int32,
     ventilatad Int32,
     antiviral Int32,
@@ -150,10 +161,14 @@ CREATE TABLE srag (
     outro_medic Int32,
     pcr_sars2 Int32,
     pos_pcrflu Int32,
+    tp_flu_pcr Nullable(Int32),
     pcr_vsr Int32,
     pcr_para Int32,
     pcr_outro Int32,
-    pcr_resul Int32
+    pcr_resul Int32,
+    vacina_cov Nullable(Int32),
+    dose_1_cov Nullable(Date),
+    dose_2_cov Nullable(Date)
 ) ENGINE = MergeTree()
 ORDER BY (dt_notific, sg_uf_not, co_mun_not)
 PARTITION BY toYYYYMM(dt_notific);
@@ -238,7 +253,17 @@ ORDER BY dt_notific DESC;
 SHOW TABLES;
 
 -- Info das tabelas
-DESCRIBE TABLE covid_vacinacao;
+DESCRIBE TABLE vacinacao;
 DESCRIBE TABLE leitos;
 DESCRIBE TABLE srag;
 DESCRIBE TABLE atencao_basica;
+
+-- ============================================================================
+-- USUÁRIO SOMENTE LEITURA DA APLICAÇÃO
+-- O entrypoint executa este arquivo com o usuário administrativo do compose.
+-- ============================================================================
+
+CREATE USER IF NOT EXISTS easydatasus_ro
+IDENTIFIED WITH plaintext_password BY 'easydatasus_ro';
+
+GRANT SELECT ON default.* TO easydatasus_ro;

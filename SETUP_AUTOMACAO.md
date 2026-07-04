@@ -230,7 +230,7 @@ docker exec -it easydatasus-clickhouse-1 clickhouse-client
 # Exemplos de queries
 SELECT COUNT(*) FROM srag;
 SELECT COUNT(*) FROM atencao_basica;
-SELECT COUNT(*) FROM covid_vacinacao;
+SELECT COUNT(*) FROM vacinacao;
 ```
 
 ### FastAPI - Ver Logs

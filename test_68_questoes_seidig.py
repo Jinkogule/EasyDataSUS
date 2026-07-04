@@ -33,11 +33,185 @@ import argparse
 # Adicionar backend ao path
 sys.path.insert(0, str(Path(__file__).parent / "backend"))
 
-from services.sql_service import generate_sql
-from db.clickhouse import run_query
-from services.interpretation_service import interpret_result
-from config.datasets import get_table_name, DATASETS_CONFIG
+from routes.query import ask, AskRequest
 from metadata.loader import load_metadata
+
+
+INTEROPERABILITY_GOLD = {
+    61: {
+        "data_answerability": "full",
+        "implementation_support": "supported",
+        "expected_datasets": ["surtos-srag", "atencao-basica"],
+        "expected_relationships": ["srag_ubs_municipio_notificacao"],
+        "reference_sql": """WITH srag_municipalities AS (SELECT DISTINCT co_mun_not AS ibge FROM srag), ubs_municipalities AS (SELECT DISTINCT ibge FROM atencao_basica) SELECT COUNT(*) AS total_municipios FROM srag_municipalities AS s INNER JOIN ubs_municipalities AS u ON s.ibge = u.ibge""",
+        "reference_result": None,
+        "note": "Conta municípios com SRAG e cobertura de UBS usando o relacionamento municipal.",
+    },
+    62: {
+        "data_answerability": "partial",
+        "implementation_support": "supported",
+        "expected_datasets": ["surtos-srag", "atencao-basica"],
+        "expected_relationships": ["srag_ubs_municipio_notificacao"],
+        "reference_sql": None,
+        "reference_result": None,
+        "note": "A cobertura exige denominador populacional; a formulação atual é parcial.",
+    },
+    63: {
+        "data_answerability": "unavailable",
+        "implementation_support": "unsupported",
+        "expected_datasets": ["surtos-srag", "leitos", "atencao-basica"],
+        "expected_relationships": [],
+        "reference_sql": None,
+        "reference_result": None,
+        "note": "A regra de < 5 leitos por 10k hab exige população, ausente no conjunto atual.",
+    },
+    64: {
+        "data_answerability": "partial",
+        "implementation_support": "unsupported",
+        "expected_datasets": ["covid-19-vacinacao", "surtos-srag"],
+        "expected_relationships": [],
+        "reference_sql": None,
+        "reference_result": None,
+        "note": "Incidência e cobertura exigem denominadores populacionais, ausentes no conjunto atual.",
+    },
+    65: {
+        "data_answerability": "partial",
+        "implementation_support": "unsupported",
+        "expected_datasets": ["surtos-srag", "leitos"],
+        "expected_relationships": [],
+        "reference_sql": None,
+        "reference_result": None,
+        "note": "Exige relacionamento SRAG–Leitos e definição explícita da taxa de UTI disponível.",
+    },
+    66: {
+        "data_answerability": "partial",
+        "implementation_support": "unsupported",
+        "expected_datasets": ["surtos-srag", "leitos"],
+        "expected_relationships": [],
+        "reference_sql": None,
+        "reference_result": None,
+        "note": "A métrica de internação em 7 dias pode ser respondida apenas se a base expuser datas compatíveis.",
+    },
+    67: {
+        "data_answerability": "unavailable",
+        "implementation_support": "unsupported",
+        "expected_datasets": ["atencao-basica", "covid-19-vacinacao"],
+        "expected_relationships": [],
+        "reference_sql": None,
+        "reference_result": None,
+        "note": "A correlação em densidade por estado precisa de população ou de uma definição alternativa de densidade.",
+    },
+    68: {
+        "data_answerability": "partial",
+        "implementation_support": "unsupported",
+        "expected_datasets": ["surtos-srag", "leitos", "atencao-basica"],
+        "expected_relationships": [],
+        "reference_sql": None,
+        "reference_result": None,
+        "note": "O déficit de resposta depende de uma regra explícita para leitos insuficientes.",
+    },
+}
+
+
+def get_interoperability_rubric(question_number: int) -> dict:
+    return INTEROPERABILITY_GOLD.get(question_number, {})
+
+
+def _normalize_string_list(value):
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [item.strip() for item in re.split(r"[,;]", value) if item.strip()]
+    if isinstance(value, dict):
+        for key in ("id", "name", "table_name", "relationship", "dataset"):
+            if key in value and value[key]:
+                return [str(value[key]).strip()]
+        return []
+    if isinstance(value, list):
+        normalized = []
+        for item in value:
+            if isinstance(item, dict):
+                for key in ("id", "name", "table_name", "relationship", "dataset"):
+                    if key in item and item[key]:
+                        normalized.append(str(item[key]).strip())
+                        break
+            elif item is not None:
+                normalized.append(str(item).strip())
+        return [item for item in normalized if item]
+    return [str(value).strip()]
+
+
+def _relationship_key(value):
+    if isinstance(value, dict):
+        for key in ("id", "name", "relationship", "relationship_id"):
+            if key in value and value[key]:
+                return str(value[key]).strip()
+        source = value.get("source_dataset") or value.get("source")
+        target = value.get("target_dataset") or value.get("target")
+        if source and target:
+            return f"{source}:{target}"
+    return str(value).strip() if value is not None else ""
+
+
+def _compute_selection_metrics(results: list[dict]) -> dict:
+    dataset_evaluated = [result for result in results if result.get("expected_datasets")]
+    relationship_evaluated = [
+        result
+        for result in results
+        if result.get("implementation_support") == "supported"
+        and result.get("expected_relationships")
+    ]
+    if not dataset_evaluated:
+        return {"evaluated": 0}
+
+    dataset_tp = dataset_fp = dataset_fn = 0
+    relationship_tp = relationship_fp = relationship_fn = 0
+    exact_matches = 0
+    relationship_exact_matches = 0
+
+    for result in dataset_evaluated:
+        expected_datasets = set(_normalize_string_list(result.get("expected_datasets")))
+        predicted_datasets = set(_normalize_string_list(result.get("datasets")))
+        dataset_tp += len(expected_datasets & predicted_datasets)
+        dataset_fp += len(predicted_datasets - expected_datasets)
+        dataset_fn += len(expected_datasets - predicted_datasets)
+        if expected_datasets == predicted_datasets:
+            exact_matches += 1
+
+    for result in relationship_evaluated:
+        expected_relationships = set(_normalize_string_list(result.get("expected_relationships")))
+        predicted_relationships = {
+            _relationship_key(item)
+            for item in _normalize_string_list(result.get("relationships"))
+        }
+        relationship_tp += len(expected_relationships & predicted_relationships)
+        relationship_fp += len(predicted_relationships - expected_relationships)
+        relationship_fn += len(expected_relationships - predicted_relationships)
+        if expected_relationships == predicted_relationships:
+            relationship_exact_matches += 1
+
+    def _prf(tp, fp, fn):
+        precision = tp / (tp + fp) if (tp + fp) else None
+        recall = tp / (tp + fn) if (tp + fn) else None
+        f1 = (2 * precision * recall / (precision + recall)) if precision is not None and recall is not None and (precision + recall) else None
+        return {"precision": precision, "recall": recall, "f1": f1}
+
+    return {
+        "evaluated": len(dataset_evaluated),
+        "dataset_selection": {
+            **_prf(dataset_tp, dataset_fp, dataset_fn),
+            "evaluated": len(dataset_evaluated),
+            "exact_match_rate": exact_matches / len(dataset_evaluated),
+        },
+        "relationship_selection": {
+            **_prf(relationship_tp, relationship_fp, relationship_fn),
+            "evaluated": len(relationship_evaluated),
+            "exact_match_rate": (
+                relationship_exact_matches / len(relationship_evaluated)
+                if relationship_evaluated else None
+            ),
+        },
+    }
 
 
 def parse_68_questions() -> dict:
@@ -139,6 +313,7 @@ def parse_68_questions() -> dict:
                 j += 1
             
             question_id += 1
+            rubric = get_interoperability_rubric(q_num) if current_dataset == "interoperabilidade" else {}
             questions_dict[current_dataset].append({
                 "id": question_id,
                 "number": q_num,
@@ -146,7 +321,8 @@ def parse_68_questions() -> dict:
                 "objetivo": objetivo or "Não especificado",
                 "complexidade": complexidade,
                 "bloco": current_bloco or "Geral",
-                "dataset": current_dataset
+                "dataset": current_dataset,
+                **rubric,
             })
         
         i += 1
@@ -175,6 +351,7 @@ def test_question(question_data: dict, verbose: bool = False) -> dict:
         }
     """
     dataset = question_data["dataset"]
+    use_endpoint_dataset = None if dataset == "interoperabilidade" else dataset
     
     result = {
         "question_id": question_data["id"],
@@ -182,6 +359,13 @@ def test_question(question_data: dict, verbose: bool = False) -> dict:
         "dataset": dataset,
         "bloco": question_data.get("bloco"),
         "complexidade": question_data.get("complexidade"),
+        "data_answerability": question_data.get("data_answerability"),
+        "implementation_support": question_data.get("implementation_support"),
+        "expected_datasets": question_data.get("expected_datasets"),
+        "expected_relationships": question_data.get("expected_relationships"),
+        "reference_sql": question_data.get("reference_sql"),
+        "reference_result": question_data.get("reference_result"),
+        "benchmark_note": question_data.get("note"),
         "status": "pending",
         "sql_generated": None,
         "execution_time": 0,
@@ -191,79 +375,48 @@ def test_question(question_data: dict, verbose: bool = False) -> dict:
     }
     
     try:
-        # Carregar metadata
-        metadata = None
-        try:
-            metadata = load_metadata(dataset)
-            if isinstance(metadata, dict):
-                metadata = json.dumps(metadata, ensure_ascii=False)
-        except Exception:
-            metadata = "{}"
-        
-        # Gerar SQL
         if verbose:
-            print(f"  [SQL]...", end=" ", flush=True)
-        
-        sql = generate_sql(
+            print(f"  [ASK]...", end=" ", flush=True)
+
+        request = AskRequest(
             question=question_data["question"],
-            metadata=metadata,
-            model_name="deepseek-local",
-            dataset=dataset
+            model="deepseek-local",
+            dataset=use_endpoint_dataset,
         )
-        
-        if not sql:
-            result["status"] = "sql_error"
-            result["error_message"] = "Nenhum SQL gerado"
-            return result
-        
-        result["sql_generated"] = sql
-        
-        if verbose:
-            print(f"✓ | [EXEC]...", end=" ", flush=True)
-        
-        # Executar query
+
         start = time.time()
-        query_result = run_query(sql)
+        response = ask(request)
         execution_time = time.time() - start
-        
         result["execution_time"] = execution_time
-        
-        if isinstance(query_result, dict) and "error" in query_result:
-            result["status"] = "exec_error"
-            result["error_message"] = query_result.get("error")
+
+        if isinstance(response, dict):
+            result["sql_generated"] = response.get("sql")
+            data = response.get("data")
+            result["result_rows"] = len(data) if isinstance(data, list) else 0
+            result["interpretation"] = response.get("insight")
+            result["datasets"] = response.get("datasets")
+            result["cross_dataset"] = response.get("cross_dataset")
+            result["relationships"] = response.get("relationships")
+            result["routing_mode"] = response.get("routing_mode")
+            result["sql_generation_mode"] = response.get("sql_generation_mode")
+            result["validation"] = response.get("validation")
+            result["timing_s"] = response.get("timing_s")
+
+            if response.get("success"):
+                result["status"] = "success"
+            else:
+                result["status"] = "error"
+                result["error_message"] = data.get("error") if isinstance(data, dict) else "Falha no endpoint"
+
             if verbose:
-                print(f"✗")
+                print("✓" if result["status"] == "success" else "✗")
+
             return result
-        
-        result["result_rows"] = len(query_result) if isinstance(query_result, list) else 0
-        
+
+        result["status"] = "error"
+        result["error_message"] = "Resposta inválida do endpoint"
         if verbose:
-            print(f"✓ ({result['result_rows']} linhas, {execution_time:.2f}s) | [INTERP]...", end=" ", flush=True)
-        
-        # Interpretar resultado
-        interpretation = interpret_result(
-            question=question_data["question"],
-            result=query_result,
-            model_name="deepseek-local",
-            dataset=dataset
-        )
-        
-        if isinstance(interpretation, dict):
-            if "error" in interpretation:
-                result["status"] = "interp_error"
-                result["error_message"] = interpretation.get("error")
-                if verbose:
-                    print(f"✗")
-                return result
-            result["interpretation"] = interpretation.get("insight") or str(interpretation)
-        else:
-            result["interpretation"] = str(interpretation)
-        
-        result["status"] = "success"
-        
-        if verbose:
-            print(f"✓")
-        
+            print("✗")
         return result
     
     except Exception as e:
@@ -379,6 +532,12 @@ def run_test_suite(dataset_filter: str = None, start_q: int = None, end_q: int =
     total_time = time.time() - start_time_total
     total_passed = sum(1 for r in all_results if r["status"] == "success")
     total_failed = len(all_results) - total_passed
+    fully_answerable_results = [r for r in all_results if r.get("data_answerability") == "full"]
+    partial_results = [r for r in all_results if r.get("data_answerability") == "partial"]
+    unavailable_results = [r for r in all_results if r.get("data_answerability") == "unavailable"]
+    supported_results = [r for r in all_results if r.get("implementation_support") == "supported"]
+    fully_answerable_executed = sum(1 for r in fully_answerable_results if r["status"] == "success")
+    evaluation_metrics = _compute_selection_metrics(all_results)
     
     print(f"\n{'='*100}")
     print(f"📊 RESUMO FINAL")
@@ -386,6 +545,26 @@ def run_test_suite(dataset_filter: str = None, start_q: int = None, end_q: int =
     print(f"Total: {len(all_results)} questões testadas")
     print(f"✅ Sucessos: {total_passed} ({total_passed/len(all_results)*100:.1f}%)")
     print(f"❌ Falhas: {total_failed} ({total_failed/len(all_results)*100:.1f}%)")
+    if fully_answerable_results:
+        print(f"🎯 Execuções bem-sucedidas nas questões plenamente respondíveis: {fully_answerable_executed}/{len(fully_answerable_results)} ({fully_answerable_executed/len(fully_answerable_results)*100:.1f}%)")
+    print(f"🟨 Questões parciais: {len(partial_results)}")
+    print(f"🟥 Questões indisponíveis com os dados atuais: {len(unavailable_results)}")
+    print(f"🧩 Questões com suporte implementado: {len(supported_results)}")
+    if evaluation_metrics.get("evaluated"):
+        dataset_metrics = evaluation_metrics.get("dataset_selection", {})
+        relationship_metrics = evaluation_metrics.get("relationship_selection", {})
+        print(
+            "📐 Seleção de datasets: "
+            f"P={dataset_metrics.get('precision') if dataset_metrics.get('precision') is not None else 'n/a'} "
+            f"R={dataset_metrics.get('recall') if dataset_metrics.get('recall') is not None else 'n/a'} "
+            f"F1={dataset_metrics.get('f1') if dataset_metrics.get('f1') is not None else 'n/a'}"
+        )
+        print(
+            "🔗 Seleção de relacionamentos: "
+            f"P={relationship_metrics.get('precision') if relationship_metrics.get('precision') is not None else 'n/a'} "
+            f"R={relationship_metrics.get('recall') if relationship_metrics.get('recall') is not None else 'n/a'} "
+            f"F1={relationship_metrics.get('f1') if relationship_metrics.get('f1') is not None else 'n/a'}"
+        )
     print(f"⏱️  Tempo total: {total_time:.1f}s ({total_time/len(all_results):.2f}s/questão)")
     
     # Salvar resultados
@@ -397,6 +576,13 @@ def run_test_suite(dataset_filter: str = None, start_q: int = None, end_q: int =
             "passed": total_passed,
             "failed": total_failed,
             "success_rate": total_passed / len(all_results),
+            "fully_answerable_total": len(fully_answerable_results),
+            "fully_answerable_executed": fully_answerable_executed,
+            "fully_answerable_execution_rate": (fully_answerable_executed / len(fully_answerable_results)) if fully_answerable_results else None,
+            "partial_total": len(partial_results),
+            "unavailable_total": len(unavailable_results),
+            "implementation_supported_total": len(supported_results),
+            "evaluation": evaluation_metrics,
             "total_time": total_time,
             "results": all_results
         }, f, ensure_ascii=False, indent=2)
