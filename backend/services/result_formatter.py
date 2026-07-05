@@ -6,6 +6,17 @@ from sqlglot import exp, parse_one
 
 
 LABELS = {
+    "uf": "UF",
+    "municipio": "município",
+    "município": "município",
+    "ibge": "código IBGE",
+    "regiao": "região",
+    "região": "região",
+    "total": "total",
+    "total_registros": "total de registros",
+    "leitos_sus": "leitos SUS",
+    "leitos_totais": "total de leitos existentes",
+    "percentual_sus": "proporção de leitos SUS (%)",
     "total_doses": "número de doses registradas",
     "total_uti_beds": "quantidade de leitos de UTI",
     "total_srag": "número de notificações de SRAG",
@@ -17,6 +28,8 @@ DIMENSION_COLUMNS = {
     "uf", "estado", "municipio", "município", "ibge", "co_mun_not",
     "co_mun_res", "cnes", "regiao", "região", "codigo", "código",
 }
+
+INSIGHT_PREVIEW_ROWS = 3
 
 
 def extract_output_columns(sql: str) -> List[str]:
@@ -59,8 +72,17 @@ def _label(column: str) -> str:
 
 def _format_dimension(column: str, value) -> str:
     normalized = column.lower()
-    if normalized in {"ibge", "co_mun_not", "co_mun_res", "municipio", "município"}:
+    if normalized in {"cs_sexo", "sexo", "paciente_enumsexobiologico"}:
+        labels = {
+            "M": "Masculino",
+            "F": "Feminino",
+            "I": "Ignorado ou indeterminado",
+        }
+        return labels.get(str(value).upper(), str(value))
+    if normalized in {"ibge", "co_mun_not", "co_mun_res"}:
         return f"município (código IBGE {value})"
+    if normalized in {"municipio", "município"}:
+        return str(value)
     if normalized == "cnes":
         return f"estabelecimento (CNES {value})"
     return str(value)
@@ -82,6 +104,60 @@ def _scalar_label(column: str, question: str) -> str:
             return "Total de UBS"
         return "Total de registros"
     return _label(column).capitalize()
+
+
+def build_result_highlights(
+    sql: str,
+    rows: Sequence[Sequence],
+    max_items: int = INSIGHT_PREVIEW_ROWS,
+    question: str = "",
+) -> List[str]:
+    """Produz poucos destaques legíveis, mantendo a tabela como fonte do detalhe."""
+
+    if not rows or max_items <= 0:
+        return []
+    normalized_rows = [tuple(row) if isinstance(row, (list, tuple)) else (row,) for row in rows]
+    width = len(normalized_rows[0])
+    columns = extract_output_columns(sql)
+    if len(columns) != width:
+        columns = [f"coluna_{index + 1}" for index in range(width)]
+
+    numeric_indices = [
+        index for index in range(width)
+        if columns[index].lower() not in DIMENSION_COLUMNS
+        and any(isinstance(row[index], Number) and not isinstance(row[index], bool) for row in normalized_rows)
+    ]
+    dimension_indices = [index for index in range(width) if index not in numeric_indices]
+
+    highlights = []
+    for row in normalized_rows[:max_items]:
+        if dimension_indices and numeric_indices:
+            dimension = ", ".join(
+                _format_dimension(columns[index], row[index]) for index in dimension_indices
+            )
+            metrics = ", ".join(
+                f"{_contextual_metric_label(columns[index], question)}: {_format_value(row[index])}"
+                for index in numeric_indices
+            )
+            highlights.append(f"{dimension} — {metrics}")
+        else:
+            highlights.append(
+                ", ".join(
+                    f"{_label(column)}: {_format_value(value)}"
+                    for column, value in zip(columns, row)
+                )
+            )
+    return highlights
+
+
+def _contextual_metric_label(column: str, question: str) -> str:
+    normalized_column = column.lower()
+    normalized_question = question.lower()
+    if normalized_column == "total" and "srag" in normalized_question:
+        return "casos de SRAG"
+    if normalized_column == "total" and any(term in normalized_question for term in ("ubs", "unidade básica")):
+        return "quantidade de UBS"
+    return _label(column)
 
 
 def build_factual_summary(sql: str, rows: Sequence[Sequence], question: str = "") -> str:
@@ -109,26 +185,50 @@ def build_factual_summary(sql: str, rows: Sequence[Sequence], question: str = ""
     dimension_indices = [index for index in range(width) if index not in numeric_indices]
 
     normalized_question = question.lower()
-    is_listing = any(term in normalized_question for term in ("quais", "liste", "listar", "apresente", "respectivos"))
+    is_distribution = any(
+        term in normalized_question
+        for term in ("distribuição", "distribuicao", "por sexo", "por categoria", "por tipo")
+    )
+    listing_terms = (
+        "quais", "liste", "listar", "apresente", "respectivos",
+        "por estado", "por uf", "por município", "por municipio", "por cidade",
+        "por região", "por regiao",
+    )
+    is_listing = any(term in normalized_question for term in listing_terms)
 
-    if numeric_indices and dimension_indices and is_listing:
+    if is_distribution and len(numeric_indices) == 1 and dimension_indices:
+        metric_index = numeric_indices[0]
+        numeric_values = [
+            row[metric_index]
+            for row in normalized_rows
+            if isinstance(row[metric_index], Number) and not isinstance(row[metric_index], bool)
+        ]
+        total = sum(numeric_values)
         preview = []
-        for row in normalized_rows[:10]:
+        for row in normalized_rows[:INSIGHT_PREVIEW_ROWS]:
             dimension = ", ".join(
                 _format_dimension(columns[index], row[index]) for index in dimension_indices
             )
-            metrics = ", ".join(
-                f"{_label(columns[index])}: {_format_value(row[index])}" for index in numeric_indices
+            value = row[metric_index]
+            percentage = (float(value) / float(total) * 100.0) if total else 0.0
+            preview.append(
+                f"{dimension}: {_format_value(value)} ({_format_value(percentage)}%)"
             )
-            preview.append(f"{dimension} ({metrics})")
-        suffix = "" if len(normalized_rows) <= 10 else f" Os demais {len(normalized_rows) - 10} resultados retornados estão na tabela."
+        remaining = len(normalized_rows) - len(preview)
+        suffix = "" if remaining <= 0 else f" Consulte a tabela para as outras {remaining} categorias."
+        return "Distribuição dos resultados: " + "; ".join(preview) + "." + suffix
+
+    if dimension_indices and is_listing:
+        preview = build_result_highlights(sql, normalized_rows, question=question)
+        remaining = len(normalized_rows) - len(preview)
+        suffix = "" if remaining <= 0 else f" Consulte a tabela para os outros {remaining} resultados retornados."
         result_word = "resultado" if len(normalized_rows) == 1 else "resultados"
         limit = _extract_limit(sql)
         if limit is not None and len(normalized_rows) >= limit:
-            prefix = f"A consulta retornou os primeiros {len(normalized_rows)} {result_word} (limite aplicado)"
+            prefix = f"A consulta retornou os primeiros {len(normalized_rows)} {result_word} devido ao limite aplicado"
         else:
             prefix = f"Foram encontrados {len(normalized_rows)} {result_word}"
-        return prefix + ": " + "; ".join(preview) + "." + suffix
+        return prefix + ". Destaques: " + "; ".join(preview) + "." + suffix
 
     if numeric_indices and dimension_indices:
         statements = []
@@ -159,13 +259,18 @@ def should_use_deterministic_interpretation(question: str, factual_summary: str)
         term in normalized for term in ranking_terms
     )
     is_listing = factual_summary.startswith(("Foram encontrados", "A consulta retornou os primeiros")) and any(
-        term in normalized for term in ("quais", "liste", "listar", "apresente", "respectivos")
+        term in normalized for term in (
+            "quais", "liste", "listar", "apresente", "respectivos",
+            "por estado", "por uf", "por município", "por municipio", "por cidade",
+            "por região", "por regiao",
+        )
     )
     is_scalar = factual_summary.lower().startswith(("total de ", "media:", "média:"))
     is_comparison = factual_summary.startswith("Nos dados retornados,") and any(
         term in normalized for term in ("compare", "comparar", "comparação", "comparacao", "versus")
     )
-    return is_ranking or is_listing or is_scalar or is_comparison
+    is_distribution = factual_summary.startswith("Distribuição dos resultados:")
+    return is_ranking or is_listing or is_scalar or is_comparison or is_distribution
 
 
 def is_low_information_interpretation(insight: str, factual_summary: str) -> bool:

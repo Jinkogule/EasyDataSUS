@@ -51,9 +51,9 @@ class ResultFormatterTests(unittest.TestCase):
             [("AC", 373854, 105), ("SP", 824, 15676)],
             "Quais estados possuem registros nas duas bases e quais são os respectivos totais?",
         )
-        self.assertTrue(summary.startswith("Foram encontrados 2 resultados:"))
-        self.assertIn("AC (número de doses registradas: 373.854", summary)
-        self.assertIn("SP (número de doses registradas: 824", summary)
+        self.assertTrue(summary.startswith("Foram encontrados 2 resultados. Destaques:"))
+        self.assertIn("AC — número de doses registradas: 373.854", summary)
+        self.assertIn("SP — número de doses registradas: 824", summary)
 
     def test_comparison_uses_deterministic_factual_summary(self):
         summary = build_factual_summary(
@@ -83,7 +83,7 @@ class ResultFormatterTests(unittest.TestCase):
             [(355030, 120, 45)],
             "Quais municípios possuem SRAG e UBS e quais são os respectivos totais?",
         )
-        self.assertTrue(summary.startswith("Foram encontrados 1 resultado:"))
+        self.assertTrue(summary.startswith("Foram encontrados 1 resultado. Destaques:"))
         self.assertIn("355030", summary)
         self.assertIn("município (código IBGE 355030)", summary)
         self.assertTrue(
@@ -100,8 +100,24 @@ class ResultFormatterTests(unittest.TestCase):
             rows,
             "Quais municípios possuem SRAG e UBS?",
         )
-        self.assertTrue(summary.startswith("A consulta retornou os primeiros 100 resultados (limite aplicado):"))
-        self.assertIn("Os demais 90 resultados retornados estão na tabela.", summary)
+        self.assertTrue(summary.startswith("A consulta retornou os primeiros 100 resultados devido ao limite aplicado."))
+        self.assertIn("Consulte a tabela para os outros 97 resultados retornados.", summary)
+
+    def test_distribution_calculates_percentages_and_translates_sex_codes(self):
+        summary = build_factual_summary(
+            "SELECT cs_sexo, COUNT(*) AS total FROM srag GROUP BY cs_sexo ORDER BY total DESC",
+            [("M", 48074), ("F", 44073), ("I", 9)],
+            "Qual é a distribuição dos casos de SRAG por sexo?",
+        )
+        self.assertIn("Masculino: 48.074 (52,17%)", summary)
+        self.assertIn("Feminino: 44.073 (47,82%)", summary)
+        self.assertIn("Ignorado ou indeterminado: 9 (0,01%)", summary)
+        self.assertTrue(
+            should_use_deterministic_interpretation(
+                "Qual é a distribuição dos casos de SRAG por sexo?",
+                summary,
+            )
+        )
 
 
 if __name__ == "__main__":
