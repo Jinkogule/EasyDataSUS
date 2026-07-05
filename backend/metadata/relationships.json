@@ -1,0 +1,20 @@
+{
+  "relationships": [
+    {
+      "id": "srag_ubs_municipio_notificacao",
+      "description": "Relaciona notificações de SRAG às UBS do município",
+      "source_dataset": "surtos-srag",
+      "source_table": "srag",
+      "source_column": "co_mun_not",
+      "target_dataset": "atencao-basica",
+      "target_table": "atencao_basica",
+      "target_column": "ibge",
+      "join_type": "INNER",
+      "common_dimension": "municipality",
+      "source_granularity": "notification",
+      "target_granularity": "health_facility",
+      "cardinality": "many-to-many",
+      "requires_preaggregation": true
+    }
+  ]
+}

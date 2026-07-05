@@ -213,6 +213,13 @@ def _get_dataset_context(dataset: str) -> str:
         String descrevendo o dataset e seus campos principais
     """
     try:
+        if "," in dataset:
+            datasets = [item.strip() for item in dataset.split(",") if item.strip()]
+            contexts = []
+            for dataset_id in datasets:
+                contexts.append(_get_dataset_context(dataset_id))
+            return "\n\n".join(contexts)
+
         config = get_dataset_config(dataset)
         description = config.get("description", "")
         

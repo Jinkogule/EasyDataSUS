@@ -72,7 +72,7 @@ def extract_sql(text: str) -> str:
     text = text.rstrip().rstrip('`')
     
     # 1. Try markdown code block ```sql
-    match = re.search(r"```(?:sql)?\s*(SELECT\s+.+?)(?:```|$)", text, re.DOTALL | re.IGNORECASE)
+    match = re.search(r"```(?:sql)?\s*((?:WITH|SELECT)\s+.+?)(?:```|$)", text, re.DOTALL | re.IGNORECASE)
     if match:
         sql = match.group(1).strip().rstrip('`')
         if sql and sql.upper().startswith("SELECT") and "FROM" in sql.upper():
@@ -82,7 +82,7 @@ def extract_sql(text: str) -> str:
     # 2. Extract SELECT ... pattern (mais específico e robusto)
     # Procura por SELECT até uma quebra natural: fim de parágrafo (dupla quebra), backtick, ou fim do texto
     match = re.search(
-        r"(SELECT\s+.+?)(?:\n\n|```|$)",
+        r"((?:WITH|SELECT)\s+.+?)(?:\n\n|```|$)",
         text,
         re.DOTALL | re.IGNORECASE
     )
@@ -97,13 +97,18 @@ def extract_sql(text: str) -> str:
             if not any(op in sql.upper() for op in [" = ", " IN ", " LIKE ", " > ", " < "]):
                 logger.warning(f"SQL tem WHERE mas sem operador de comparação: {sql[:100]}")
                 return None
-        if sql and sql.upper().startswith("SELECT") and "FROM" in sql.upper():
+        if sql and (sql.upper().startswith("SELECT") or sql.upper().startswith("WITH")) and "FROM" in sql.upper():
             logger.debug(f"SQL extraído com regex SELECT...LIMIT: {sql[:50]}...")
             return sql
     
     # 3. Fallback simples: tudo que começa com SELECT até primeira quebra de linha dupla ou backtick
-    if "SELECT" in text.upper():
-        idx = text.upper().find("SELECT")
+    if "SELECT" in text.upper() or "WITH" in text.upper():
+        select_idx = text.upper().find("SELECT")
+        with_idx = text.upper().find("WITH")
+        if with_idx != -1 and (select_idx == -1 or with_idx < select_idx):
+            idx = with_idx
+        else:
+            idx = select_idx
         # Pegar desde SELECT até LIMIT, backtick, ou fim de parágrafo
         raw = text[idx:]
         # Remove backticks
@@ -118,7 +123,7 @@ def extract_sql(text: str) -> str:
         for candidate in candidates:
             candidate = candidate.strip().rstrip('`')
             # Validar mínima integridade
-            if candidate.upper().startswith("SELECT") and "FROM" in candidate.upper():
+            if (candidate.upper().startswith("SELECT") or candidate.upper().startswith("WITH")) and "FROM" in candidate.upper():
                 logger.debug(f"SQL extraído por fallback simples: {candidate[:50]}...")
                 return candidate
     
