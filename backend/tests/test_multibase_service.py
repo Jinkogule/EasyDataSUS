@@ -52,6 +52,33 @@ class MultibaseServiceTests(unittest.TestCase):
         validation = multibase_service.validate_sql(invalid_sql, ["surtos-srag", "atencao-basica"], relationships)
         self.assertFalse(validation.valid)
 
+    def test_rejects_write_statement(self):
+        relationships = relationship_service.find_relationships(["surtos-srag", "atencao-basica"])
+        validation = multibase_service.validate_sql(
+            "INSERT INTO srag SELECT * FROM srag",
+            ["surtos-srag", "atencao-basica"],
+            relationships,
+        )
+        self.assertFalse(validation.valid)
+
+    def test_rejects_missing_attribute(self):
+        relationships = relationship_service.find_relationships(["surtos-srag", "atencao-basica"])
+        validation = multibase_service.validate_sql(
+            "SELECT s.campo_inexistente FROM srag s",
+            ["surtos-srag"],
+            relationships,
+        )
+        self.assertFalse(validation.valid)
+
+    def test_rejects_direct_join_when_preaggregation_is_required(self):
+        relationships = relationship_service.find_relationships(["surtos-srag", "atencao-basica"])
+        validation = multibase_service.validate_sql(
+            "SELECT a.ibge, COUNT(*) FROM srag s INNER JOIN atencao_basica a ON s.co_mun_not = a.ibge GROUP BY a.ibge",
+            ["surtos-srag", "atencao-basica"],
+            relationships,
+        )
+        self.assertFalse(validation.valid)
+
     def test_rejects_additional_unauthorized_table(self):
         relationships = relationship_service.find_relationships(["surtos-srag", "atencao-basica"])
         sql = "SELECT * FROM srag s INNER JOIN leitos l ON s.co_mun_not = l.uf"

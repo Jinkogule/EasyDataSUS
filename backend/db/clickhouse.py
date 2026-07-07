@@ -10,8 +10,8 @@ logger = logging.getLogger(__name__)
 # Configurações do ClickHouse
 CLICKHOUSE_HOST = os.getenv("CLICKHOUSE_HOST", "localhost")
 CLICKHOUSE_PORT = int(os.getenv("CLICKHOUSE_PORT", "8123"))
-CLICKHOUSE_USER = os.getenv("CLICKHOUSE_USER", "admin")
-CLICKHOUSE_PASSWORD = os.getenv("CLICKHOUSE_PASSWORD", "admin")
+CLICKHOUSE_USER = os.getenv("CLICKHOUSE_USER", "easydatasus_ro")
+CLICKHOUSE_PASSWORD = os.getenv("CLICKHOUSE_PASSWORD", "easydatasus_ro")
 CLICKHOUSE_DATABASE = os.getenv("CLICKHOUSE_DATABASE", "default")
 
 @lru_cache(maxsize=1)
