@@ -30,7 +30,7 @@ def list_datasets():
           "id": "covid-19-vacinacao",
           "name": "Campanha Nacional de Vacinação COVID-19",
           "description": "Vacinação COVID-19 no Brasil",
-          "table_name": "covid_vacinacao",
+                    "table_name": "vacinacao",
           "objetivo_estrategico": "OE 3.6.1",
           "dominio": "Imunização",
           "status": "implementado"
