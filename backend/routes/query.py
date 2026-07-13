@@ -355,7 +355,11 @@ def ask(req: AskRequest):
                 timings["stages"]["sql_generation"] = time.time() - stage_start
 
                 if not raw_sql:
-                    raw_sql = multibase_service.build_deterministic_fallback_sql(selected_datasets, relationships)
+                    raw_sql = multibase_service.build_deterministic_fallback_sql(
+                        selected_datasets,
+                        relationships,
+                        req.question,
+                    )
                     if raw_sql:
                         sql_generation_mode = "deterministic_fallback"
                     else:
@@ -379,7 +383,11 @@ def ask(req: AskRequest):
                 timings["stages"]["validation"] = time.time() - stage_start
 
                 if not validation_result.valid:
-                    fallback_sql = multibase_service.build_deterministic_fallback_sql(selected_datasets, relationships)
+                    fallback_sql = multibase_service.build_deterministic_fallback_sql(
+                        selected_datasets,
+                        relationships,
+                        req.question,
+                    )
                     if fallback_sql:
                         sql = sanitize_sql(fallback_sql)
                         validation_result = multibase_service.validate_sql(sql, selected_datasets, relationships)

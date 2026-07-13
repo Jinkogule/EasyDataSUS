@@ -79,6 +79,66 @@ class MultibaseServiceTests(unittest.TestCase):
         )
         self.assertFalse(validation.valid)
 
+    def test_accepts_qualified_column_case_insensitively(self):
+        validation = multibase_service.validate_sql(
+            "SELECT s.CO_MUN_NOT FROM srag AS s",
+            ["surtos-srag"],
+            [],
+        )
+        self.assertTrue(validation.valid)
+
+    def test_rejects_direct_join_with_long_aliases(self):
+        relationships = relationship_service.find_relationships(["surtos-srag", "atencao-basica"])
+        validation = multibase_service.validate_sql(
+            "SELECT sr.CO_MUN_NOT, ubs.IBGE FROM srag AS sr "
+            "INNER JOIN atencao_basica AS ubs ON sr.CO_MUN_NOT = ubs.IBGE",
+            ["surtos-srag", "atencao-basica"],
+            relationships,
+        )
+        self.assertFalse(validation.valid)
+
+    def test_accepts_preaggregation_with_alternative_cte_and_key_aliases(self):
+        relationships = relationship_service.find_relationships(["surtos-srag", "atencao-basica"])
+        sql = """
+WITH
+cases_by_city AS (
+    SELECT co_mun_not AS city_key, COUNT(*) AS case_count
+    FROM srag
+    GROUP BY co_mun_not
+),
+facilities_by_city AS (
+    SELECT ibge AS municipality_key, COUNT(DISTINCT cnes) AS facility_count
+    FROM atencao_basica
+    GROUP BY ibge
+)
+SELECT c.city_key, c.case_count, f.facility_count
+FROM cases_by_city AS c
+INNER JOIN facilities_by_city AS f
+    ON c.city_key = f.municipality_key
+"""
+        validation = multibase_service.validate_sql(
+            sql,
+            ["surtos-srag", "atencao-basica"],
+            relationships,
+        )
+        self.assertTrue(validation.valid, validation.errors)
+
+    def test_fallback_answers_municipality_count_intention(self):
+        relationships = relationship_service.find_relationships(["surtos-srag", "atencao-basica"])
+        sql = multibase_service.build_deterministic_fallback_sql(
+            ["surtos-srag", "atencao-basica"],
+            relationships,
+            "Em quantos municípios há casos de SRAG e também UBS?",
+        )
+        self.assertIsNotNone(sql)
+        self.assertIn("COUNT(*) AS total_municipios", sql)
+        validation = multibase_service.validate_sql(
+            sql,
+            ["surtos-srag", "atencao-basica"],
+            relationships,
+        )
+        self.assertTrue(validation.valid, validation.errors)
+
     def test_rejects_additional_unauthorized_table(self):
         relationships = relationship_service.find_relationships(["surtos-srag", "atencao-basica"])
         sql = "SELECT * FROM srag s INNER JOIN leitos l ON s.co_mun_not = l.uf"

@@ -225,10 +225,39 @@ class MultibaseService:
 
         return sql, "llm"
 
-    def build_deterministic_fallback_sql(self, selected_datasets: Sequence[str], relationships: Sequence[Relationship]) -> Optional[str]:
+    def build_deterministic_fallback_sql(
+        self,
+        selected_datasets: Sequence[str],
+        relationships: Sequence[Relationship],
+        question: str = "",
+    ) -> Optional[str]:
         if set(selected_datasets) == {"surtos-srag", "atencao-basica"} and relationships:
             relationship = relationships[0]
             if relationship.requires_preaggregation:
+                question_lower = question.lower()
+                asks_municipality_count = (
+                    "quantos municípios" in question_lower
+                    or "quantos municipios" in question_lower
+                    or "em quantos municípios" in question_lower
+                    or "em quantos municipios" in question_lower
+                )
+                if asks_municipality_count:
+                    return f"""
+WITH
+srag_municipalities AS (
+    SELECT DISTINCT {relationship.source_column} AS ibge
+    FROM {relationship.source_table}
+),
+ubs_municipalities AS (
+    SELECT DISTINCT {relationship.target_column} AS ibge
+    FROM {relationship.target_table}
+)
+SELECT COUNT(*) AS total_municipios
+FROM srag_municipalities AS s
+INNER JOIN ubs_municipalities AS u
+    ON s.ibge = u.ibge
+""".strip()
+
                 return f"""
 WITH
 srag_by_municipality AS (
@@ -293,6 +322,10 @@ LIMIT 100
         if invalid_tables:
             return SqlValidationResult(False, physical_tables, [], list(cte_names), [f"Tabelas não autorizadas: {', '.join(invalid_tables)}"])
 
+        missing_tables = sorted(allowed_tables - set(physical_tables))
+        if len(selected_datasets) > 1 and missing_tables:
+            return SqlValidationResult(False, physical_tables, [], list(cte_names), [f"Tabelas selecionadas ausentes da consulta: {', '.join(missing_tables)}"])
+
         joins = []
         allowed_pairs = self._allowed_join_pairs(relationships)
         selected_columns = self._allowed_columns_by_dataset(selected_datasets)
@@ -315,7 +348,7 @@ LIMIT 100
                     return SqlValidationResult(False, physical_tables, joins, list(cte_names), [f"Coluna não autorizada: {table_alias}.{column_name}"])
                 continue
 
-            if column_name.lower() in selected_columns_lower or column_name in output_aliases:
+            if column_name.lower() in selected_columns_lower or column_name.lower() in output_aliases:
                 continue
 
             return SqlValidationResult(False, physical_tables, joins, list(cte_names), [f"Coluna não autorizada: {column_name}"])
@@ -327,15 +360,24 @@ LIMIT 100
         if len(selected_datasets) > 1 and not join_nodes:
             return SqlValidationResult(False, physical_tables, joins, list(cte_names), ["Consulta multibase sem JOIN reconhecível"])
 
-        for join_node in join_nodes:
-            for relationship in relationships:
-                if relationship.requires_preaggregation and set(selected_datasets) == {relationship.source_dataset, relationship.target_dataset}:
-                    if isinstance(join_node.this, exp.Table):
-                        joined_table_name = join_node.this.name.lower()
-                        physical_table_names = {get_table_name(dataset).lower() for dataset in selected_datasets}
-                        if joined_table_name in physical_table_names:
-                            return SqlValidationResult(False, physical_tables, joins, list(cte_names), ["Relacionamento exige pré-agregação antes do JOIN"])
+        preaggregated_pairs: Dict[str, set[str]] = {}
+        for relationship in relationships:
+            if relationship.requires_preaggregation and {
+                relationship.source_dataset,
+                relationship.target_dataset,
+            }.issubset(set(selected_datasets)):
+                pairs = self._preaggregated_join_pairs(parsed, relationship)
+                if not pairs:
+                    return SqlValidationResult(
+                        False,
+                        physical_tables,
+                        joins,
+                        list(cte_names),
+                        [f"Relacionamento {relationship.id} exige pré-agregação dos dois lados antes do JOIN"],
+                    )
+                preaggregated_pairs[relationship.id] = pairs
 
+        for join_node in join_nodes:
             on_expression = join_node.args.get("on")
             if on_expression is None:
                 return SqlValidationResult(False, physical_tables, joins, list(cte_names), ["JOIN sem condição ON não é permitido"])
@@ -346,7 +388,7 @@ LIMIT 100
             joins.append(join_text)
             normalized = self._normalize_join_condition(join_text)
 
-            if self._is_preaggregated_srag_ubs_query(sql_clean, selected_datasets, normalized):
+            if any(normalized in pairs for pairs in preaggregated_pairs.values()):
                 continue
 
             if normalized not in allowed_pairs:
@@ -411,12 +453,68 @@ LIMIT 100
         return any(isinstance(node, tuple(forbidden_classes)) for node in parsed.walk())
 
     @staticmethod
-    @staticmethod
     def _normalize_join_condition(join_text: str) -> str:
         normalized = re.sub(r"\b[a-zA-Z_][\w]*\.", "", join_text.lower())
         normalized = re.sub(r"\s+", "", normalized)
         normalized = normalized.replace("`", "")
         return normalized
+
+    @staticmethod
+    def _preaggregated_join_pairs(parsed, relationship: Relationship) -> set[str]:
+        """Retorna pares de chaves de saída de CTEs que agregam cada lado da relação."""
+
+        def cte_key_alias(cte, physical_table: str, relationship_column: str) -> Optional[str]:
+            query = cte.this
+            table_names = {table.name.lower() for table in query.find_all(exp.Table)}
+            if physical_table.lower() not in table_names:
+                return None
+
+            group = query.args.get("group")
+            is_distinct = bool(query.args.get("distinct"))
+            if group is not None:
+                grouped_columns = {column.name.lower() for column in group.find_all(exp.Column)}
+            elif is_distinct:
+                grouped_columns = {
+                    column.name.lower()
+                    for expression in query.expressions
+                    for column in expression.find_all(exp.Column)
+                }
+            else:
+                return None
+
+            if relationship_column.lower() not in grouped_columns:
+                return None
+
+            if not is_distinct and not any(isinstance(node, exp.AggFunc) for node in query.walk()):
+                return None
+
+            for expression in query.expressions:
+                if isinstance(expression, exp.Alias):
+                    source_columns = list(expression.this.find_all(exp.Column))
+                    if any(column.name.lower() == relationship_column.lower() for column in source_columns):
+                        return expression.alias.lower()
+                if isinstance(expression, exp.Column) and expression.name.lower() == relationship_column.lower():
+                    return expression.name.lower()
+
+            return None
+
+        source_aliases = []
+        target_aliases = []
+        for cte in parsed.find_all(exp.CTE):
+            source_alias = cte_key_alias(cte, relationship.source_table, relationship.source_column)
+            if source_alias:
+                source_aliases.append(source_alias)
+
+            target_alias = cte_key_alias(cte, relationship.target_table, relationship.target_column)
+            if target_alias:
+                target_aliases.append(target_alias)
+
+        pairs = set()
+        for source_alias in source_aliases:
+            for target_alias in target_aliases:
+                pairs.add(f"{source_alias}={target_alias}")
+                pairs.add(f"{target_alias}={source_alias}")
+        return pairs
 
     @staticmethod
     def _is_preaggregated_srag_ubs_query(sql: str, selected_datasets: Sequence[str], normalized_join: str) -> bool:

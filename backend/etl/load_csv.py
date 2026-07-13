@@ -1,5 +1,6 @@
 import csv
 import logging
+import os
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -25,8 +26,8 @@ def get_clickhouse_client():
         client = clickhouse_connect.get_client(
             host="localhost",
             port=8123,
-            username="admin",
-            password="admin",
+            username=os.getenv("CLICKHOUSE_ADMIN_USER", "easydatasus_admin"),
+            password=os.getenv("CLICKHOUSE_ADMIN_PASSWORD", "easydatasus_admin"),
             database="default"
         )
         logger.info("Conectado ao ClickHouse")
@@ -213,9 +214,11 @@ def load_csv(csv_path: str = None, dataset: str = "covid-19-vacinacao"):
             tsv_content = "\n".join(tsv_lines) + "\n"
             
             # Usar pipe direto para stdin com encoding UTF-8
+            admin_user = os.getenv("CLICKHOUSE_ADMIN_USER", "easydatasus_admin")
+            admin_password = os.getenv("CLICKHOUSE_ADMIN_PASSWORD", "easydatasus_admin")
             cmd = [
                 'docker', 'exec', '-i', 'easydatasus-clickhouse', 
-                'clickhouse-client', '-u', 'admin', '--password', 'admin', 
+                'clickhouse-client', '-u', admin_user, '--password', admin_password,
                 '-d', 'default', 
                 '-q', f'INSERT INTO {table_name} FORMAT TSV'
             ]
