@@ -2,22 +2,31 @@
 # -*- coding: utf-8 -*-
 
 """
-Script para criar a tabela 'vacinacao' (compatível com init.sql original)
-e criar alias para 'covid_vacinacao'
+Script para criar a tabela canônica 'vacinacao'.
 """
 
 import sys
 from pathlib import Path
 import logging
+import os
+
+import clickhouse_connect
+from dotenv import load_dotenv
 
 sys.path.insert(0, str(Path(__file__).parent / "backend"))
 
-from db.clickhouse import get_client
+load_dotenv(Path(__file__).parent / "backend" / ".env")
 
 logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-client = get_client()
+client = clickhouse_connect.get_client(
+    host=os.getenv("CLICKHOUSE_HOST", "localhost"),
+    port=int(os.getenv("CLICKHOUSE_PORT", "8123")),
+    username=os.getenv("CLICKHOUSE_ADMIN_USER", "easydatasus_admin"),
+    password=os.getenv("CLICKHOUSE_ADMIN_PASSWORD", "easydatasus_admin"),
+    database=os.getenv("CLICKHOUSE_DATABASE", "default"),
+)
 
 logger.info("Criando tabela 'vacinacao' (compatível com init.sql)...")
 try:
@@ -63,14 +72,6 @@ try:
 except Exception as e:
     logger.warning(f"⚠️  Tabela 'vacinacao' já existe: {str(e)[:50]}")
 
-logger.info("\nCriando view 'covid_vacinacao' como alias para 'vacinacao'...")
-try:
-    client.query("DROP VIEW IF EXISTS covid_vacinacao;")
-    client.query("CREATE VIEW covid_vacinacao AS SELECT * FROM vacinacao;")
-    logger.info("✅ View 'covid_vacinacao' criada (aponta para 'vacinacao')")
-except Exception as e:
-    logger.error(f"❌ Erro ao criar view: {e}")
-
 logger.info("\nVerificando tabelas...")
 result = client.query("SHOW TABLES").result_rows
 tables = [r[0] for r in result]
@@ -78,5 +79,3 @@ logger.info(f"Tabelas: {', '.join(tables)}")
 
 if 'vacinacao' in tables:
     logger.info("✅ 'vacinacao' existe")
-if 'covid_vacinacao' in tables:
-    logger.info("✅ 'covid_vacinacao' (view) existe")

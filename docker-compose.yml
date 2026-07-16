@@ -7,11 +7,13 @@ services:
       - "9000:9000"
     environment:
       CLICKHOUSE_DB: default
-      CLICKHOUSE_USER: admin
-      CLICKHOUSE_PASSWORD: admin
+      # Usuário administrativo usado apenas pelo entrypoint/bootstrap.
+      # A aplicação deve usar easydatasus_ro, configurado em backend/.env.
+      CLICKHOUSE_USER: ${CLICKHOUSE_ADMIN_USER:-easydatasus_admin}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_ADMIN_PASSWORD:-easydatasus_admin}
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
     volumes:
-      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./init_all_tables.sql:/docker-entrypoint-initdb.d/init_all_tables.sql
       - clickhouse_data:/var/lib/clickhouse
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8123/ping"]
