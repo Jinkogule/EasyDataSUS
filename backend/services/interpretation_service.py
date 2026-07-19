@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 import re
 from datetime import datetime, date
 from metadata.loader import load_metadata
@@ -296,7 +297,13 @@ def _format_result_for_llm(result: list, max_rows: int = 50) -> str:
     return formatted + more_msg
 
 
-def interpret_result(question: str, result, model_name: str = "deepseek-local", dataset: str = "covid-19-vacinacao") -> str:
+def interpret_result(
+    question: str,
+    result,
+    model_name: str = "deepseek-local",
+    dataset: str = "covid-19-vacinacao",
+    factual_summary: str = "",
+) -> str:
     """
     Interpreta resultado usando LLM com abordagem TIPO-ESPECÍFICA.
     
@@ -348,11 +355,23 @@ def interpret_result(question: str, result, model_name: str = "deepseek-local", 
             result_type=result_type,
             result=result
         )
+        if factual_summary:
+            prompt += (
+                "\n\nRESUMO FATUAL CALCULADO DIRETAMENTE DOS DADOS:\n"
+                f"{factual_summary}\n"
+                "A resposta não pode contradizer esse resumo nem atribuir a uma categoria o máximo de outra métrica."
+            )
         
         logger.debug(f"Enviando para LLM {model_name} com {len(result)} linhas de resultado (tipo: {result_type})")
         
         # Obter resposta do LLM
-        response = llm.generate(prompt)
+        response = llm.generate(
+            prompt,
+            num_predict=int(os.getenv("OLLAMA_INTERPRETATION_NUM_PREDICT", "256")),
+            temperature=0.0,
+            timeout_s=int(os.getenv("OLLAMA_INTERPRETATION_TIMEOUT", "60")),
+            max_retries=1,
+        )
         
         if not response or not response.strip():
             logger.warning("Resposta vazia do LLM, usando fallback")

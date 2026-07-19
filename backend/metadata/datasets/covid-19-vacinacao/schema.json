@@ -18,7 +18,7 @@
       "descricao": "Idade do paciente em anos"
     },
     "paciente_dataNascimento": {
-      "tipo": "Date",
+      "tipo": "Date32",
       "descricao": "Data de nascimento (YYYY-MM-DD)"
     },
     "paciente_enumSexoBiologico": {

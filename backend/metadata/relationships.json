@@ -14,7 +14,35 @@
       "source_granularity": "notification",
       "target_granularity": "health_facility",
       "cardinality": "many-to-many",
-      "requires_preaggregation": true
+      "requires_preaggregation": true,
+      "source_temporal_column": "",
+      "target_temporal_column": "",
+      "use_latest_target_period": false,
+      "analytical_notes": "Compare contagens agregadas por município; não faça JOIN direto entre registros de casos e estabelecimentos.",
+      "result_notes": [
+        "As notificações de SRAG são agrupadas pelo município de notificação, que pode ser diferente do município de residência do paciente."
+      ]
+    },
+    {
+      "id": "vacinacao_leitos_uf",
+      "description": "Relaciona registros de vacinação à oferta de leitos hospitalares por unidade federativa",
+      "source_dataset": "covid-19-vacinacao",
+      "source_table": "vacinacao",
+      "source_column": "paciente_endereco_uf",
+      "target_dataset": "leitos",
+      "target_table": "leitos",
+      "target_column": "UF",
+      "join_type": "INNER",
+      "common_dimension": "state",
+      "source_granularity": "vaccination_record",
+      "target_granularity": "health_facility_competence",
+      "cardinality": "many-to-many",
+      "requires_preaggregation": true,
+      "source_temporal_column": "",
+      "target_temporal_column": "COMP",
+      "use_latest_target_period": true,
+      "analytical_notes": "A base de vacinação permite contar registros ou doses aplicadas por UF, mas não calcular cobertura vacinal sem um denominador populacional.",
+      "limitation_keywords": ["cobertura", "percentual", "taxa"]
     }
   ]
 }

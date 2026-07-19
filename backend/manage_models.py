@@ -13,26 +13,22 @@ MODELS = {
     "deepseek-coder:6.7b-base-q4_K_M": {
         "name": "deepseek-local",
         "description": "DeepSeek Coder 6.7B - Otimizado para SQL",
-        "size": "4.1GB",
-        "installed": True  # Este já está instalado
+        "size": "4.1GB"
     },
     "neural-chat": {
         "name": "neural-local",
         "description": "Neural Chat 7B - Melhor para português",
-        "size": "4.7GB",
-        "installed": False
+        "size": "4.7GB"
     },
     "mistral": {
         "name": "mistral-local",
         "description": "Mistral 7B - Rápido e preciso",
-        "size": "4GB",
-        "installed": False
+        "size": "4GB"
     },
     "orca-mini": {
         "name": "orca-local",
         "description": "Orca Mini 3B - Extremamente leve",
-        "size": "2GB",
-        "installed": False
+        "size": "2GB"
     },
 }
 
@@ -42,9 +38,7 @@ def list_models():
     print(f"{'Model':<15} {'Nome':<20} {'Tamanho':<10} {'Descrição':<50}")
     print("-" * 95)
     for model, info in MODELS.items():
-        status = "Instalado" if info['installed'] else "Não instalado"
         print(f"{model:<15} {info['name']:<20} {info['size']:<10} {info['description']:<50}")
-        print(f"                          {status}")
     print()
 
 def pull_model(model_name):
@@ -142,9 +136,8 @@ EXEMPLO:
     elif cmd == "install-all":
         print("Instalando todos os modelos recomendados...\n")
         for model in MODELS.keys():
-            if model != "deepseek-coder:6.7b-base-q4_K_M":  # Pular deepseek que já está
-                pull_model(model)
-                print()
+            pull_model(model)
+            print()
     else:
         print(f"Comando desconhecido: {cmd}")
 

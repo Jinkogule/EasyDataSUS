@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from routes import query, questions, admin, datasets
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
+from services.readiness_service import check_runtime_readiness
 
 # Carregar .env
 load_dotenv()
@@ -42,6 +43,12 @@ app.include_router(admin.router, prefix="/api", tags=["admin"])
 @app.get("/health")
 def health_check():
     return {"status": "ok", "service": "EasyDataSUS"}
+
+
+@app.get("/health/ready")
+def readiness_check():
+    """Informa se Ollama, modelo, ClickHouse, tabelas e permissões estão prontos."""
+    return check_runtime_readiness()
 
 @app.get("/")
 def root():

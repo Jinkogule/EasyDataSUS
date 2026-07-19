@@ -29,6 +29,7 @@ import re
 from pathlib import Path
 from datetime import datetime
 import argparse
+import os
 
 # Adicionar backend ao path
 sys.path.insert(0, str(Path(__file__).parent / "backend"))
@@ -572,6 +573,7 @@ def run_test_suite(dataset_filter: str = None, start_q: int = None, end_q: int =
     with open(results_file, 'w', encoding='utf-8') as f:
         json.dump({
             "timestamp": datetime.now().isoformat(),
+            "sql_generation_strategy": os.getenv("SQL_GENERATION_STRATEGY", "llm_first"),
             "total_questions": len(all_results),
             "passed": total_passed,
             "failed": total_failed,
@@ -596,8 +598,15 @@ def main():
     parser.add_argument("--start", type=int, help="Primeira questão (número)")
     parser.add_argument("--end", type=int, help="Última questão (número)")
     parser.add_argument("--verbose", "-v", action="store_true", help="Output detalhado")
+    parser.add_argument(
+        "--generation-strategy",
+        choices=["llm_first", "deterministic_first"],
+        default="llm_first",
+        help="Estratégia de geração SQL; experimentos Text-to-SQL usam llm_first",
+    )
     
     args = parser.parse_args()
+    os.environ["SQL_GENERATION_STRATEGY"] = args.generation_strategy
     
     run_test_suite(
         dataset_filter=args.dataset,

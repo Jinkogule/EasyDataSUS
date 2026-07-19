@@ -21,15 +21,15 @@ data/
 ```python
 from etl.load_csv import load_csv
 
-# Carrega o dataset padrão (covid-19-vacinacao)
+# Limpa e recarrega todos os datasets configurados
 load_csv()
 
 # Carrega um dataset específico
-load_csv(dataset="dengue-2024")
-load_csv(dataset="influenza-2025")
+load_csv(dataset="leitos")
+load_csv(dataset="surtos-srag")
 
 # Ou especifique o caminho completo
-load_csv("/path/to/custom.csv", dataset="custom")
+load_csv("/path/to/custom.csv", dataset="leitos")
 ```
 
 ## Formato dos Arquivos CSV
@@ -50,8 +50,8 @@ DOC-002;PAC-002;32;...
 
 1. **Validação**: Verifica se arquivo existe
 2. **Truncate**: Limpa tabela ClickHouse para evitar duplicações
-3. **Parsing**: Converte CSV para TSV interno
-4. **Insert**: Envia dados via pipe para ClickHouse
+3. **Parsing**: Converte datas, números, textos e valores nulos
+4. **Insert**: Envia os dados em lotes para o ClickHouse
 5. **Verificação**: Exibe estatísticas de carga
 
 ## Adicionando Novo Dataset
@@ -90,8 +90,9 @@ DOC-002;PAC-002;32;...
 
 ## Performance
 
-- Cada dataset é carregado independentemente
-- TRUNCATE automático garante integridade
+- Sem argumento, todas as tabelas configuradas são limpas e recarregadas
+- Com `dataset=...`, somente a tabela correspondente é substituída
+- A pré-validação ocorre antes de qualquer TRUNCATE
 - Logging detalhado mostra progresso
 - ~10K linhas/segundo em ambiente Docker
 
@@ -119,5 +120,5 @@ Esta estrutura permite:
 - ✅ Múltiplos datasets coexistindo
 - ✅ Fácil adição de novos datasets
 - ✅ TRUNCATE seletivo por dataset
-- ✅ Queries entre datasets (futuro)
+- ✅ Queries entre datasets por relacionamentos semânticos cadastrados
 - ✅ Versionamento de datasets (ex: dengue-2023, dengue-2024)

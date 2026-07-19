@@ -1,6 +1,7 @@
 import re
 import logging
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -387,6 +388,8 @@ REGRAS OBRIGATÓRIAS PARA LEITOS:
 15. Para calcular percentual SUS → (SUM(LEITOS_SUS) / SUM(LEITOS_EXISTENTES)) * 100
 16. NUNCA use COUNT(*) para contar leitos - sempre use SUM() em colunas de capacidade
 17. Use LIMIT 100 para resultados grandes
+18. Leitos são fotografias por competência: ao agregar capacidade sem período explícito, filtre COMP = (SELECT MAX(COMP) FROM leitos)
+19. Se a pergunta mencionar competência mais recente, o filtro pela maior COMP é obrigatório
         """,
     "surtos-srag": """
 REGRAS OBRIGATÓRIAS PARA SRAG:
@@ -417,7 +420,13 @@ REGRAS OBRIGATÓRIAS PARA ATENÇÃO BÁSICA:
     return rules_map.get(dataset, "")
 
 
-def generate_sql(question, metadata, model_name, dataset: str = "covid-19-vacinacao"):
+def generate_sql(
+    question,
+    metadata,
+    model_name,
+    dataset: str = "covid-19-vacinacao",
+    return_mode: bool = False,
+):
     """
     Gera SQL com few-shot learning e validação.
     
@@ -433,6 +442,24 @@ def generate_sql(question, metadata, model_name, dataset: str = "covid-19-vacina
         Query SQL válida ou None se falhar
     """
     logger.info(f"Gerando SQL para: {question[:50]}... (dataset: {dataset})")
+
+    def pack(sql_value, mode):
+        return (sql_value, mode) if return_mode else sql_value
+
+    question_lower = question.lower().strip()
+    strategy = os.getenv("SQL_GENERATION_STRATEGY", "deterministic_first").lower()
+    is_simple_count = any(
+        question_lower.startswith(prefix)
+        for prefix in ("quantas", "quantos", "qual é o total", "qual a quantidade")
+    ) and dataset in {"covid-19-vacinacao", "surtos-srag", "atencao-basica"}
+    is_bed_availability_list = (
+        dataset == "leitos"
+        and question_lower.startswith("quais")
+        and "uti" in question_lower
+        and any(term in question_lower for term in ("têm", "tem", "possuem", "possui"))
+    )
+    if strategy == "deterministic_first" and (is_simple_count or is_bed_availability_list):
+        return pack(fallback_sql(question, dataset), "deterministic_rule")
     
     llm = get_llm(model_name)
     
@@ -441,14 +468,14 @@ def generate_sql(question, metadata, model_name, dataset: str = "covid-19-vacina
         schema_info = json.loads(metadata)
     except json.JSONDecodeError:
         logger.error(f"Erro ao parsejar metadata JSON para dataset {dataset}")
-        return fallback_sql(question, dataset)
+        return pack(fallback_sql(question, dataset), "deterministic_fallback")
     
     # FIXO: Obter tabela dinamicamente
     try:
         table_name = get_table_name(dataset)
     except ValueError as e:
         logger.error(f"Dataset inválido: {e}")
-        return fallback_sql(question, dataset)
+        return pack(fallback_sql(question, dataset), "deterministic_fallback")
     
     # FIXO: Formatar colunas do schema dinamicamente
     colunas_info = _format_columns_from_schema(schema_info)
@@ -479,7 +506,7 @@ REGRA ABSOLUTA: Para "quantas/quantos" → SEMPRE use COUNT(*)
 
 Exemplo: 
   Pergunta: "Quantas vacinas em SP?"
-  Resposta: SELECT COUNT(*) FROM vacinacao WHERE paciente_endereco_uf = 'SP' LIMIT 10000
+  Resposta: SELECT COUNT(*) AS total_registros FROM vacinacao WHERE paciente_endereco_uf = 'SP'
 
 COLUNAS MAIS USADAS:
 {colunas_info}
@@ -524,25 +551,31 @@ PERGUNTA DO USUÁRIO:
 Responda apenas com a query SQL:"""
 
     try:
-        response = llm.generate(prompt)
+        response = llm.generate(
+            prompt,
+            num_predict=int(os.getenv("OLLAMA_SQL_NUM_PREDICT", "512")),
+            temperature=0.0,
+            timeout_s=int(os.getenv("OLLAMA_SQL_TIMEOUT", "60")),
+            max_retries=1,
+        )
         logger.debug(f"Resposta LLM (primeira 200 chars): {response[:200]}")
         
         sql = extract_sql(response)
         
         if not sql:
             logger.warning("Não conseguiu extrair SQL da resposta")
-            return fallback_sql(question, dataset)
+            return pack(fallback_sql(question, dataset), "deterministic_fallback")
         
         if not validate_sql_syntax(sql, dataset, question):
             logger.warning(f"SQL falhou validação para dataset {dataset}: {sql}")
-            return fallback_sql(question, dataset)
+            return pack(fallback_sql(question, dataset), "deterministic_fallback")
         
         logger.info(f"SQL gerado com sucesso para {dataset}: {sql[:50]}...")
-        return sql
+        return pack(sql, "llm")
         
     except Exception as e:
         logger.error(f"Erro ao gerar SQL: {e}")
-        return fallback_sql(question, dataset)
+        return pack(fallback_sql(question, dataset), "deterministic_fallback")
 
 def fallback_sql(question: str, dataset: str = "covid-19-vacinacao") -> str:
     """
@@ -845,7 +878,12 @@ def fallback_sql(question: str, dataset: str = "covid-19-vacinacao") -> str:
                         select_col = "DISTINCT MUNICIPIO, UF"
                         order_col = "MUNICIPIO"
                     
-                    sql = f"SELECT {select_col} FROM {table_name} WHERE {uti_col} {condition} ORDER BY {order_col} LIMIT 5000"
+                    sql = (
+                        f"SELECT {select_col} FROM {table_name} "
+                        f"WHERE {uti_col} {condition} "
+                        f"AND COMP = (SELECT MAX(COMP) FROM {table_name}) "
+                        f"ORDER BY {order_col} LIMIT 5000"
+                    )
                     logger.debug(f"Padrão 'Quais ... {'não ' if has_negation else ''}têm {uti_type}' → {sql[:60]}")
                     return sql
     
@@ -876,18 +914,26 @@ def fallback_sql(question: str, dataset: str = "covid-19-vacinacao") -> str:
                 break
         
         # Se encontrou estado, adicionar WHERE; senão usar COUNT simples
+        valid_state_codes = {
+            "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS",
+            "MG", "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC",
+            "SP", "SE", "TO",
+        }
+        if estado_code not in valid_state_codes:
+            estado_code = None
+
         if estado_code:
             mapped_state_code = state_code_aliases.get(dataset, {}).get(estado_code, estado_code)
-            sql = f"SELECT COUNT(*) as total FROM {table_name} WHERE {state_col} = '{mapped_state_code}' LIMIT 10000"
+            sql = f"SELECT COUNT(*) AS total_registros FROM {table_name} WHERE {state_col} = '{mapped_state_code}'"
             logger.debug(f"Estado '{estado_code}' extraído → WHERE {state_col} = '{mapped_state_code}'")
         else:
-            sql = f"SELECT COUNT(*) as total FROM {table_name} LIMIT 10000"
+            sql = f"SELECT COUNT(*) AS total_registros FROM {table_name}"
             logger.debug("Nenhum estado extraído, usando COUNT simples")
     
     # ========== DETECTAR PADRÃO: "Quantas total/geral" → COUNT simples ==========
     elif any(word in q for word in ["quantas", "quantos", "quanto", "total", "geral", "contar", "casos"]):
         logger.debug("Padrão detectado: 'Quantas total' → COUNT(*)")
-        sql = f"SELECT COUNT(*) as total FROM {table_name} LIMIT 10000"
+        sql = f"SELECT COUNT(*) AS total_registros FROM {table_name}"
     
     # ========== DETECTAR PADRÃO: "Por estado/região" → GROUP BY ==========
     elif any(word in q for word in ["por estado", "por uf", "cada estado", "por região", "região"]):
@@ -897,7 +943,7 @@ def fallback_sql(question: str, dataset: str = "covid-19-vacinacao") -> str:
     # ========== DEFAULT: COUNT simples ==========
     else:
         logger.debug("Nenhum padrão detectado, usando COUNT simples")
-        sql = f"SELECT COUNT(*) as total FROM {table_name} LIMIT 10000"
+        sql = f"SELECT COUNT(*) AS total_registros FROM {table_name}"
     
     logger.info(f"Fallback SQL para {dataset}: {sql}")
     return sql
