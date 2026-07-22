@@ -191,6 +191,62 @@ def validate_sql_syntax(sql: str, dataset: str = "covid-19-vacinacao", original_
         if f" {cmd} " in f" {sql_clean} ":
             logger.warning(f"SQL contém comando proibido: {cmd}")
             return False
+
+    # Validação semântica mínima: impede agregações válidas sintaticamente,
+    # mas incompatíveis com a intenção analítica da pergunta.
+    question_lower = original_question.lower() if original_question else ""
+    asks_by_state = any(term in question_lower for term in ("por estado", "por uf", "cada estado", "estados"))
+    asks_municipality = any(term in question_lower for term in ("município", "municipio", "cidade"))
+    asks_ranking = any(term in question_lower for term in ("maior", "maiores", "mais", "ranking", "top"))
+
+    if dataset == "covid-19-vacinacao" and asks_by_state and asks_ranking:
+        if "GROUP BY" not in sql_clean or "COUNT(" not in sql_clean:
+            logger.warning("Ranking de vacinação por estado exige GROUP BY e COUNT")
+            return False
+        if "MAX(PACIENTE_ENDERECO_UF)" in sql_clean:
+            logger.warning("Código de UF não pode ser maximizado como métrica")
+            return False
+
+    if dataset == "leitos" and "uti" in question_lower:
+        if asks_by_state and (
+            "SUM(UTI_" not in sql_clean
+            or "GROUP BY" not in sql_clean
+            or "MAX(COMP)" not in sql_clean
+        ):
+            logger.warning("Capacidade de UTI por estado exige SUM, GROUP BY e competência mais recente")
+            return False
+        if original_question.lower().startswith("quais") and asks_municipality:
+            if "COUNT(*)" in sql_clean or "WHERE" not in sql_clean or "MAX(COMP)" not in sql_clean:
+                logger.warning("Listagem de municípios com UTI exige filtro de capacidade e competência")
+                return False
+
+    asks_ratio = any(
+        term in question_lower
+        for term in ("proporção", "proporcao", "percentual", "porcentagem", "em relação")
+    )
+    if dataset == "leitos" and asks_ratio and "leitos sus" in question_lower:
+        required_fragments = (
+            "SUM(LEITOS_SUS)",
+            "SUM(LEITOS_EXISTENTES)",
+            "GROUP BY",
+            "MAX(COMP)",
+        )
+        if not all(fragment in sql_clean for fragment in required_fragments) or "/" not in sql_clean:
+            logger.warning("Proporção de leitos SUS exige somas, divisão, agrupamento e competência mais recente")
+            return False
+
+    if dataset == "surtos-srag" and asks_by_state:
+        if "GROUP BY" not in sql_clean or "COUNT(" not in sql_clean:
+            logger.warning("Notificações de SRAG por estado exigem GROUP BY e COUNT")
+            return False
+
+    if dataset == "atencao-basica" and asks_municipality and asks_ranking:
+        if "GROUP BY" not in sql_clean or "COUNT(" not in sql_clean:
+            logger.warning("Ranking municipal de UBS exige GROUP BY e COUNT")
+            return False
+        if "MAX(IBGE)" in sql_clean:
+            logger.warning("Código IBGE não pode ser maximizado como métrica")
+            return False
     
     return True
 
@@ -448,17 +504,32 @@ def generate_sql(
 
     question_lower = question.lower().strip()
     strategy = os.getenv("SQL_GENERATION_STRATEGY", "deterministic_first").lower()
+    has_grouping_request = any(
+        term in question_lower
+        for term in (
+            "por estado", "por uf", "por município", "por municipio",
+            "por cidade", "cada estado", "cada município", "cada municipio",
+        )
+    )
     is_simple_count = any(
         question_lower.startswith(prefix)
         for prefix in ("quantas", "quantos", "qual é o total", "qual a quantidade")
-    ) and dataset in {"covid-19-vacinacao", "surtos-srag", "atencao-basica"}
+    ) and not has_grouping_request and dataset in {"covid-19-vacinacao", "surtos-srag", "atencao-basica"}
     is_bed_availability_list = (
         dataset == "leitos"
         and question_lower.startswith("quais")
         and "uti" in question_lower
         and any(term in question_lower for term in ("têm", "tem", "possuem", "possui"))
     )
-    if strategy == "deterministic_first" and (is_simple_count or is_bed_availability_list):
+    is_supported_grouped_request = (
+        (dataset == "covid-19-vacinacao" and "estado" in question_lower and any(term in question_lower for term in ("maior", "maiores", "mais doses")))
+        or (dataset == "leitos" and "uti" in question_lower and has_grouping_request)
+        or (dataset == "surtos-srag" and "srag" in question_lower and has_grouping_request)
+        or (dataset == "atencao-basica" and any(term in question_lower for term in ("município", "municipio", "cidade")) and any(term in question_lower for term in ("maior", "maiores", "mais")))
+    )
+    if strategy == "deterministic_first" and (
+        is_simple_count or is_bed_availability_list or is_supported_grouped_request
+    ):
         return pack(fallback_sql(question, dataset), "deterministic_rule")
     
     llm = get_llm(model_name)
@@ -729,6 +800,95 @@ def fallback_sql(question: str, dataset: str = "covid-19-vacinacao") -> str:
             "TO": "17",
         }
     }
+
+    # ========== PADRÕES ANALÍTICOS PRIORITÁRIOS ==========
+    # Devem preceder MAX/MIN genéricos, pois códigos territoriais são dimensões.
+    state_grouping = any(term in q for term in ("por estado", "por uf", "cada estado", "estados"))
+    municipality_grouping = any(
+        term in q for term in ("município", "municipio", "municípios", "municipios", "cidade", "cidades")
+    )
+    ranking_request = any(term in q for term in ("maior", "maiores", "mais", "ranking", "top"))
+
+    ratio_request = any(
+        term in q
+        for term in ("proporção", "proporcao", "percentual", "porcentagem", "em relação")
+    )
+
+    if dataset == "leitos" and ratio_request and "leitos sus" in q:
+        if any(term in q for term in ("região", "regiao")):
+            dimension = "REGIAO"
+            alias = "regiao"
+        elif state_grouping:
+            dimension = "UF"
+            alias = "uf"
+        else:
+            dimension = "REGIAO"
+            alias = "regiao"
+        return (
+            f"SELECT {dimension} AS {alias}, "
+            "SUM(LEITOS_SUS) AS leitos_sus, "
+            "SUM(LEITOS_EXISTENTES) AS leitos_totais, "
+            "ROUND(100.0 * SUM(LEITOS_SUS) / nullIf(SUM(LEITOS_EXISTENTES), 0), 2) AS percentual_sus "
+            "FROM leitos WHERE "
+            f"{dimension} != '' AND COMP = (SELECT MAX(COMP) FROM leitos) "
+            f"GROUP BY {dimension} ORDER BY percentual_sus DESC LIMIT 100"
+        )
+
+    if dataset == "covid-19-vacinacao" and state_grouping and ranking_request:
+        valid_ufs = (
+            "'AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG',"
+            "'PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'"
+        )
+        return (
+            "SELECT paciente_endereco_uf AS uf, COUNT(*) AS total_doses "
+            "FROM vacinacao "
+            f"WHERE paciente_endereco_uf IN ({valid_ufs}) "
+            "GROUP BY paciente_endereco_uf ORDER BY total_doses DESC LIMIT 10"
+        )
+
+    if dataset == "leitos" and "uti" in q and state_grouping:
+        return (
+            "SELECT UF AS uf, SUM(UTI_TOTAL_EXIST) AS total_uti_beds "
+            "FROM leitos WHERE UF != '' "
+            "AND COMP = (SELECT MAX(COMP) FROM leitos) "
+            "GROUP BY UF ORDER BY total_uti_beds DESC LIMIT 100"
+        )
+
+    if dataset == "leitos" and q.startswith("quais") and "uti" in q and municipality_grouping:
+        presence_terms = ("têm", "tem", "possuem", "possui", "com uti")
+        if any(term in q for term in presence_terms):
+            uti_column = "UTI_TOTAL_EXIST"
+            for keyword, column in (
+                ("neonatal", "UTI_NEONATAL_EXIST"),
+                ("pediátrica", "UTI_PEDIATRICO_EXIST"),
+                ("pediatrica", "UTI_PEDIATRICO_EXIST"),
+                ("adulto", "UTI_ADULTO_EXIST"),
+                ("coronariana", "UTI_CORONARIANA_EXIST"),
+                ("queimado", "UTI_QUEIMADO_EXIST"),
+            ):
+                if keyword in q:
+                    uti_column = column
+                    break
+            return (
+                "SELECT DISTINCT MUNICIPIO, UF FROM leitos "
+                f"WHERE {uti_column} > 0 "
+                "AND COMP = (SELECT MAX(COMP) FROM leitos) "
+                "ORDER BY MUNICIPIO LIMIT 5000"
+            )
+
+    if dataset == "surtos-srag" and state_grouping:
+        return (
+            "SELECT SG_UF_NOT AS uf, COUNT(*) AS total_srag FROM srag "
+            "WHERE SG_UF_NOT != '' GROUP BY SG_UF_NOT "
+            "ORDER BY total_srag DESC LIMIT 100"
+        )
+
+    if dataset == "atencao-basica" and municipality_grouping and ranking_request:
+        return (
+            "SELECT IBGE AS ibge, COUNT(DISTINCT CNES) AS total_ubs "
+            "FROM atencao_basica WHERE IBGE > 0 GROUP BY IBGE "
+            "ORDER BY total_ubs DESC LIMIT 10"
+        )
     
     # ========== DETECTAR SE PERGUNTA BUSCA MENOR ("menor", "mínimo") vs MAIOR ==========
     is_asking_for_min = any(word in q for word in ["menor", "mínimo", "minima", "lowest", "least"])

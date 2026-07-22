@@ -5,13 +5,15 @@ import re
 import time
 from typing import Optional, List, Dict, Tuple
 
-from services.sql_service import generate_sql
+from services.sql_service import fallback_sql, generate_sql, validate_sql_syntax
 from db.clickhouse import run_query
 from services.interpretation_service import interpret_result
 from services.multibase_service import multibase_service
 from services.relationship_service import relationship_service
 from services.result_formatter import (
     build_factual_summary,
+    build_result_highlights,
+    extract_output_columns,
     is_low_information_interpretation,
     should_use_deterministic_interpretation,
 )
@@ -53,6 +55,9 @@ def _error_response(
         "llm_sql_attempted": sql_generation_mode in {"llm", "deterministic_fallback"},
         "validation": validation or {"valid": False, "tables": [], "joins": [], "errors": []},
         "sql": sql,
+        "columns": [],
+        "highlights": [],
+        "warnings": [],
         "data": {"error": message},
         "insight": insight,
         "factual_summary": "",
@@ -348,6 +353,9 @@ def ask(req: AskRequest):
                         "routing_mode": routing_mode,
                         "sql_generation_mode": "none",
                         "validation": {"valid": False, "tables": [], "joins": [], "errors": ["Nenhum relacionamento cadastrado para as bases selecionadas"]},
+                        "columns": [],
+                        "highlights": [],
+                        "warnings": [],
                         "data": {"error": "Não há relacionamento cadastrado para as bases selecionadas."},
                         "insight": "Não há um relacionamento validado para montar essa consulta entre bases.",
                         "success": False,
@@ -404,6 +412,9 @@ def ask(req: AskRequest):
                             "routing_mode": routing_mode,
                             "sql_generation_mode": sql_generation_mode,
                             "validation": {"valid": False, "tables": [], "joins": [], "errors": ["Não foi possível gerar SQL multibase"]},
+                            "columns": [],
+                            "highlights": [],
+                            "warnings": analytical_limitations,
                             "data": {"error": "Não foi possível gerar SQL multibase."},
                             "insight": "Não foi possível gerar uma consulta multibase válida.",
                             "success": False,
@@ -444,6 +455,9 @@ def ask(req: AskRequest):
                                 "joins": validation_result.joins,
                                 "errors": validation_result.errors,
                             },
+                            "columns": [],
+                            "highlights": [],
+                            "warnings": analytical_limitations,
                             "data": {"error": "SQL multibase inválido"},
                             "insight": "A consulta multibase não passou na validação estrutural.",
                             "success": False,
@@ -472,6 +486,9 @@ def ask(req: AskRequest):
                         "sql_generation_mode": sql_generation_mode,
                         "validation": validation_payload,
                         "sql": sql,
+                        "columns": extract_output_columns(sql),
+                        "highlights": [],
+                        "warnings": analytical_limitations,
                         "data": result,
                         "insight": f"Erro ao executar a consulta multibase: {result.get('message', result['error'])}",
                         "success": False,
@@ -494,11 +511,11 @@ def ask(req: AskRequest):
                         factual_summary=factual_summary,
                     )
                     interpretation_mode = "llm_grounded"
-                    if is_low_information_interpretation(insight, factual_summary):
+                    if insight.strip() == factual_summary.strip():
+                        interpretation_mode = "deterministic_fallback"
+                    elif is_low_information_interpretation(insight, factual_summary):
                         insight = factual_summary
                         interpretation_mode = "deterministic_fallback"
-                if analytical_limitations:
-                    insight = f"Limitação analítica: {' '.join(analytical_limitations)} {insight}"
                 timings["stages"]["interpretation"] = time.time() - stage_start
 
                 time_total = time.time() - time_start
@@ -516,6 +533,9 @@ def ask(req: AskRequest):
                     "llm_sql_attempted": sql_generation_mode in {"llm", "deterministic_fallback"},
                     "validation": validation_payload,
                     "sql": sql,
+                    "columns": extract_output_columns(sql),
+                    "highlights": build_result_highlights(sql, result, question=req.question),
+                    "warnings": analytical_limitations,
                     "data": result,
                     "insight": insight,
                     "factual_summary": factual_summary,
@@ -599,13 +619,46 @@ def ask(req: AskRequest):
         stage_start = time.time()
         logger.info("Validando SQL...")
         single_validation = multibase_service.validate_sql(sql, [dataset_to_use], [])
+        semantic_valid = validate_sql_syntax(sql, dataset_to_use, req.question)
+
+        if not single_validation.valid or not semantic_valid:
+            fallback_raw_sql = fallback_sql(req.question, dataset_to_use)
+            if fallback_raw_sql:
+                fallback_candidate = sanitize_sql(fallback_raw_sql)
+                try:
+                    fallback_candidate = multibase_service.canonicalize_sql_identifiers(
+                        fallback_candidate,
+                        [dataset_to_use],
+                    )
+                except Exception as exc:
+                    logger.warning("Não foi possível canonicalizar o fallback SQL: %s", exc)
+
+                fallback_validation = multibase_service.validate_sql(
+                    fallback_candidate,
+                    [dataset_to_use],
+                    [],
+                )
+                fallback_semantic_valid = validate_sql_syntax(
+                    fallback_candidate,
+                    dataset_to_use,
+                    req.question,
+                )
+                if fallback_validation.valid and fallback_semantic_valid:
+                    sql = fallback_candidate
+                    single_validation = fallback_validation
+                    semantic_valid = True
+                    sql_generation_mode = "deterministic_fallback"
+
+        validation_errors = list(single_validation.errors)
+        if not semantic_valid:
+            validation_errors.append("A consulta não corresponde à intenção analítica da pergunta")
         validation_payload = {
-            "valid": single_validation.valid,
+            "valid": single_validation.valid and semantic_valid,
             "tables": single_validation.tables,
             "joins": single_validation.joins,
-            "errors": single_validation.errors,
+            "errors": validation_errors,
         }
-        if not single_validation.valid:
+        if not validation_payload["valid"]:
             logger.error(f"SQL inválido: {sql}")
             return _error_response(
                 req.question,
@@ -659,7 +712,9 @@ def ask(req: AskRequest):
                 factual_summary=factual_summary,
             )
             interpretation_mode = "llm_grounded"
-            if is_low_information_interpretation(insight, factual_summary):
+            if insight.strip() == factual_summary.strip():
+                interpretation_mode = "deterministic_fallback"
+            elif is_low_information_interpretation(insight, factual_summary):
                 insight = factual_summary
                 interpretation_mode = "deterministic_fallback"
         time_interpretation = time.time() - stage_start
@@ -671,7 +726,7 @@ def ask(req: AskRequest):
         
         # ========== PRINT TIMING REPORT NO TERMINAL ==========
         print("\n" + "="*70)
-        print(f"⏱️  TIMING REPORT - {req.model.upper()}")
+        print(f"TIMING REPORT - {req.model.upper()}")
         print("="*70)
         print(f"Pergunta: {req.question[:60]}...")
         print(f"Dataset: {dataset_to_use}")
@@ -707,6 +762,11 @@ def ask(req: AskRequest):
             "llm_sql_attempted": sql_generation_mode in {"llm", "deterministic_fallback"},
             "validation": validation_payload,
             "sql": sql,
+            "columns": extract_output_columns(sql),
+            "highlights": build_result_highlights(sql, result, question=req.question),
+            "warnings": [
+                DATASETS_CONFIG[dataset_to_use]["data_scope_note"]
+            ] if DATASETS_CONFIG.get(dataset_to_use, {}).get("data_scope_note") else [],
             "data": result,
             "insight": insight,
             "factual_summary": factual_summary,

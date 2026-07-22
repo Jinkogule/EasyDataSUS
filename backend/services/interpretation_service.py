@@ -261,7 +261,7 @@ IMPORTANTE:
         return "Contexto não disponível"
 
 
-def _format_result_for_llm(result: list, max_rows: int = 50) -> str:
+def _format_result_for_llm(result: list, max_rows: int = 10) -> str:
     """
     Formata resultado para apresentação ao LLM.
     
@@ -344,7 +344,7 @@ def interpret_result(
         dataset_context = _get_dataset_context(dataset)
         
         # Formatar resultado para apresentar ao LLM
-        formatted_result = _format_result_for_llm(result, max_rows=100)
+        formatted_result = _format_result_for_llm(result, max_rows=10)
         
         # NOVO: Passar tipo e resultado para _build_interpretation_prompt
         prompt = _build_interpretation_prompt(
@@ -367,15 +367,15 @@ def interpret_result(
         # Obter resposta do LLM
         response = llm.generate(
             prompt,
-            num_predict=int(os.getenv("OLLAMA_INTERPRETATION_NUM_PREDICT", "256")),
+            num_predict=int(os.getenv("OLLAMA_INTERPRETATION_NUM_PREDICT", "128")),
             temperature=0.0,
-            timeout_s=int(os.getenv("OLLAMA_INTERPRETATION_TIMEOUT", "60")),
+            timeout_s=int(os.getenv("OLLAMA_INTERPRETATION_TIMEOUT", "20")),
             max_retries=1,
         )
         
         if not response or not response.strip():
             logger.warning("Resposta vazia do LLM, usando fallback")
-            return _fallback_interpretation(result, question)
+            return factual_summary or _fallback_interpretation(result, question)
         
         interpretation = response.strip()
         logger.info(f"Interpretação gerada com sucesso: {len(interpretation)} caracteres (tipo: {result_type})")
@@ -387,7 +387,7 @@ def interpret_result(
         logger.error(f"Erro ao interpretar resultado: {e}")
         
         # Retornar fallback quando LLM falha
-        return _fallback_interpretation(result, question)
+        return factual_summary or _fallback_interpretation(result, question)
 
 
 def _build_interpretation_prompt(question: str, result_data: str, result_count: int, dataset_context: str, result_type: str = "unknown", result: list = None) -> str:
@@ -461,9 +461,10 @@ Resultado (distribuição de {result_count} categorias):
 
 Interprete em PORTUGUÊS NATURAL respondendo como estão distribuídos os dados.
 Regras:
-- Mencione todas as categorias
-- Se há percentuais, calcule e mencione
-- Máximo 3 frases
+- Destaque no máximo as três categorias mais relevantes
+- Não calcule percentuais que não estejam nos dados fornecidos
+- Informe que os demais resultados estão disponíveis na tabela, quando aplicável
+- Máximo 2 frases
 - Claro e simples
 
 Resposta:"""
@@ -550,9 +551,10 @@ def _fallback_interpretation(result, question: str) -> str:
             else:
                 return f"Resultado: {label} lidera com {value:,}, seguido por {len(result)-1} outras categorias."
         
-        # Fallback genérico
-        return f"Consulta retornou {len(result)} registros. Primeiros dados: {result[0] if result else 'vazio'}"
+        # Fallback genérico sem expor tuplas ou estruturas internas
+        result_word = "registro" if len(result) == 1 else "registros"
+        return f"A consulta encontrou {len(result)} {result_word}. Consulte a tabela para visualizar os detalhes."
     
     except Exception as e:
         logger.error(f"Erro no fallback: {e}")
-        return f"Consulta executada com sucesso ({len(result)} registros). Verifique os dados no detalhe."
+        return "A consulta foi executada, mas não foi possível resumir o resultado. Consulte a tabela para visualizar os detalhes."
