@@ -32,6 +32,9 @@ MODELS = {
 
 def get_model_identifier(model_name: str = "deepseek-local") -> str:
     """Resolve o identificador Ollama, incluindo sobrescritas do ambiente."""
+    if model_name and ":" in model_name:
+        return model_name
+
     if model_name not in MODELS:
         model_name = "deepseek-local"
 
@@ -58,6 +61,9 @@ def get_llm(model_name: str = "deepseek-local"):
         OllamaProvider configurado com o modelo escolhido
     """
     
+    if model_name and ":" in model_name:
+        return OllamaProvider(model_name, model_name)
+
     # Usar deepseek como padrão
     if model_name not in MODELS:
         print(f"Modelo '{model_name}' desconhecido. Usando 'deepseek-local'")

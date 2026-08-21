@@ -1,9 +1,7 @@
--- Script para criar/recriar TODAS as tabelas do EasyDataSUS
+-- Cria as tabelas do EasyDataSUS
 -- Execução manual: docker exec -i easydatasus-clickhouse clickhouse-client < init_all_tables.sql
 
--- ============================================================================
--- 1. TABELA: COVID-19 VACINAÇÃO
--- ============================================================================
+-- Tabela: vacinação COVID-19
 
 DROP TABLE IF EXISTS vacinacao;
 
@@ -49,9 +47,7 @@ ALTER TABLE vacinacao ADD INDEX idx_municipio paciente_endereco_nmMunicipio TYPE
 ALTER TABLE vacinacao ADD INDEX idx_data vacina_dataAplicacao TYPE set(0);
 ALTER TABLE vacinacao ADD INDEX idx_vacina vacina_nome TYPE set(0);
 
--- ============================================================================
--- 2. TABELA: LEITOS
--- ============================================================================
+-- Tabela: leitos
 
 DROP TABLE IF EXISTS leitos;
 
@@ -99,9 +95,7 @@ ALTER TABLE leitos ADD INDEX idx_municipio MUNICIPIO TYPE set(0);
 ALTER TABLE leitos ADD INDEX idx_tipo DS_TIPO_UNIDADE TYPE set(0);
 ALTER TABLE leitos ADD INDEX idx_gestao TP_GESTAO TYPE set(0);
 
--- ============================================================================
--- 3. TABELA: SRAG (Síndrome Respiratória Aguda Grave)
--- ============================================================================
+-- Tabela: SRAG
 
 DROP TABLE IF EXISTS srag;
 
@@ -180,9 +174,7 @@ ALTER TABLE srag ADD INDEX idx_srag_evolucao evolucao TYPE set(0);
 ALTER TABLE srag ADD INDEX idx_srag_classi classi_fin TYPE set(0);
 ALTER TABLE srag ADD INDEX idx_srag_pcr pcr_sars2 TYPE set(0);
 
--- ============================================================================
--- 4. TABELA: ATENÇÃO BÁSICA (UBS)
--- ============================================================================
+-- Tabela: atenção básica
 
 DROP TABLE IF EXISTS atencao_basica;
 
@@ -203,9 +195,7 @@ ALTER TABLE atencao_basica ADD INDEX idx_ubs_uf uf TYPE set(0);
 ALTER TABLE atencao_basica ADD INDEX idx_ubs_ibge ibge TYPE set(0);
 ALTER TABLE atencao_basica ADD INDEX idx_ubs_cnes cnes TYPE set(0);
 
--- ============================================================================
--- VIEWS ANALÍTICAS
--- ============================================================================
+-- Views analíticas
 
 -- Vista: SRAG por Estado
 CREATE OR REPLACE VIEW srag_by_uf AS
@@ -245,23 +235,17 @@ WHERE hospital = 1
   AND (febre + tosse + dispneia + saturacao) >= 3
 ORDER BY dt_notific DESC;
 
--- ============================================================================
--- VERIFICAÇÃO
--- ============================================================================
+-- Verificação
 
--- Tabelas criadas
 SHOW TABLES;
 
--- Info das tabelas
 DESCRIBE TABLE vacinacao;
 DESCRIBE TABLE leitos;
 DESCRIBE TABLE srag;
 DESCRIBE TABLE atencao_basica;
 
--- ============================================================================
--- USUÁRIO SOMENTE LEITURA DA APLICAÇÃO
+-- Usuário somente leitura da aplicação
 -- O entrypoint executa este arquivo com o usuário administrativo do compose.
--- ============================================================================
 
 CREATE USER IF NOT EXISTS easydatasus_ro
 IDENTIFIED WITH plaintext_password BY 'easydatasus_ro';

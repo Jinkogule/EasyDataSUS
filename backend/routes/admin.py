@@ -25,9 +25,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-# ============================================================================
-# MODELOS PYDANTIC
-# ============================================================================
+# Modelos de resposta.
 
 class DatasetInfo(BaseModel):
     """Informações sobre um dataset"""
@@ -64,9 +62,7 @@ class SchemaValidationResponse(BaseModel):
     rows_preview: int
 
 
-# ============================================================================
-# HELPER FUNCTIONS
-# ============================================================================
+# Funções auxiliares.
 
 def get_datasets_path() -> Path:
     """Retorna caminho da pasta datasets"""
@@ -168,9 +164,7 @@ def validate_csv_schema(csv_content: str, dataset: str) -> SchemaValidationRespo
         return SchemaValidationResponse(valid=False, errors=errors, rows_preview=0)
 
 
-# ============================================================================
-# ENDPOINTS
-# ============================================================================
+# Endpoints.
 
 @router.post("/admin/datasets/upload", response_model=UploadResponse)
 async def upload_dataset(

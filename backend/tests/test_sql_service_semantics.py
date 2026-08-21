@@ -96,6 +96,27 @@ class SqlServiceSemanticTests(unittest.TestCase):
             )
         )
 
+    def test_unanswerable_vaccination_coverage_is_not_converted_to_count(self):
+        request = AskRequest(
+            question=(
+                "Qual foi a taxa de cobertura vacinal (% da população) alcançada "
+                "para COVID-19 no Brasil até o final do período?"
+            ),
+            dataset="covid-19-vacinacao",
+        )
+        with patch("routes.query.generate_sql") as generate_mock:
+            with patch("routes.query.run_query") as run_query_mock:
+                response = ask(request)
+
+        generate_mock.assert_not_called()
+        run_query_mock.assert_not_called()
+        self.assertFalse(response["success"])
+        self.assertEqual("none", response["sql_generation_mode"])
+        self.assertIsNone(response["sql"])
+        self.assertEqual("answerability", response["evaluation_metrics"]["automatic_metrics"]["failure_stage"])
+        self.assertFalse(response["evaluation_metrics"]["automatic_metrics"]["answerable"])
+        self.assertIn("denominador populacional", response["insight"])
+
     def test_bed_ratio_fallback_preserves_requested_metric(self):
         question = (
             "Qual é a proporção de leitos SUS em relação ao total de leitos "
@@ -116,6 +137,52 @@ class SqlServiceSemanticTests(unittest.TestCase):
         )
         wrong_sql = "SELECT REGIAO, COUNT(*) AS total FROM leitos GROUP BY REGIAO"
         self.assertFalse(validate_sql_syntax(wrong_sql, "leitos", question))
+
+    def test_benchmark_failure_patterns_have_semantic_fallbacks(self):
+        cases = [
+            (
+                "Qual tipo de unidade (Hospital Geral, Pronto Socorro, etc) possui maior volume de leitos?",
+                "leitos",
+                ("DS_TIPO_UNIDADE", "SUM(LEITOS_EXISTENTES)", "GROUP BY DS_TIPO_UNIDADE"),
+            ),
+            (
+                "Qual estado tem a menor quantidade absoluta de leitos de UTI neonatal na competência mais recente?",
+                "leitos",
+                ("SUM(UTI_NEONATAL_EXIST) AS total_uti_neonatal", "GROUP BY UF", "ORDER BY total_uti_neonatal ASC"),
+            ),
+            (
+                "Qual é a taxa de hospitalização entre os casos notificados de SRAG?",
+                "surtos-srag",
+                ("countIf(hospital = 1)", "taxa_hospitalizacao", "FROM srag"),
+            ),
+            (
+                "Qual é a taxa de internação em UTI entre todos os casos?",
+                "surtos-srag",
+                ("countIf(uti = 1)", "taxa_uti", "FROM srag"),
+            ),
+            (
+                "Qual é a distribuição de sintomas primários entre os casos (febre, tosse, dispneia, etc)?",
+                "surtos-srag",
+                ("AS sintomas", "countIf(febre = 1)", "countIf(tosse = 1)", "countIf(dispneia = 1)"),
+            ),
+            (
+                "Qual é a proporção de casos com comorbidades (diabetes, asma, cardiopatia, etc) entre os notificados?",
+                "surtos-srag",
+                ("percentual_com_comorbidades", "diabetes = 1", "asma = 1"),
+            ),
+            (
+                "Qual agente etiológico foi mais frequentemente identificado (SARS-CoV-2, Influenza, VSR, etc)?",
+                "surtos-srag",
+                ("AS agentes", "pcr_sars2 = 1", "pos_pcrflu = 1", "pcr_vsr = 1"),
+            ),
+        ]
+
+        for question, dataset, expected_fragments in cases:
+            with self.subTest(question=question):
+                sql = fallback_sql(question, dataset)
+                for fragment in expected_fragments:
+                    self.assertIn(fragment, sql)
+                self.assertTrue(validate_sql_syntax(sql, dataset, question))
 
     def test_llm_failure_uses_semantically_correct_bed_ratio_fallback(self):
         question = (
@@ -151,9 +218,14 @@ class SqlServiceSemanticTests(unittest.TestCase):
         for field in (
             "dataset", "datasets", "cross_dataset", "relationships",
             "routing_mode", "sql_generation_mode", "validation", "success",
+            "evaluation_metrics",
         ):
             self.assertIn(field, response)
         self.assertFalse(response["success"])
+        self.assertFalse(response["evaluation_metrics"]["automatic_metrics"]["success"])
+        self.assertIsNone(
+            response["evaluation_metrics"]["reference_dependent_metrics"]["execution_accuracy"]
+        )
 
     def test_srag_ubs_question_reaches_multibase_flow(self):
         request = AskRequest(
@@ -177,6 +249,12 @@ class SqlServiceSemanticTests(unittest.TestCase):
         self.assertEqual(response["analytical_limitations"], response["warnings"])
         self.assertIn("co_mun_not", response["sql"])
         self.assertIn("atencao_basica", response["sql"])
+        metrics = response["evaluation_metrics"]
+        self.assertTrue(metrics["ready_for_experiment"])
+        self.assertTrue(metrics["automatic_metrics"]["query_executed"])
+        self.assertEqual(1, metrics["automatic_metrics"]["row_count"])
+        self.assertEqual(["surtos-srag", "atencao-basica"], metrics["selected"]["datasets"])
+        self.assertIsNone(metrics["reference_dependent_metrics"]["exact_match"])
 
     def test_llm_generated_distribution_uses_deterministic_presentation(self):
         request = AskRequest(question="Qual é a distribuição dos casos de SRAG por sexo?")
@@ -195,6 +273,7 @@ class SqlServiceSemanticTests(unittest.TestCase):
         self.assertEqual("deterministic_factual", response["interpretation_mode"])
         self.assertIn("Masculino: 48.074 (52,17%)", response["insight"])
         self.assertEqual("Masculino — casos de SRAG: 48.074", response["highlights"][0])
+        self.assertEqual(3, response["evaluation_metrics"]["automatic_metrics"]["row_count"])
 
 
 if __name__ == "__main__":

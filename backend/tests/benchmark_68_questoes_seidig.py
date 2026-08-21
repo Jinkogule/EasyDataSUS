@@ -16,10 +16,10 @@ Distribuição:
 - Interoperabilidade: 8 questões (Q61-Q68)
 
 Uso:
-    python test_68_questoes_seidig.py
-    python test_68_questoes_seidig.py --dataset covid-19-vacinacao
-    python test_68_questoes_seidig.py --verbose
-    python test_68_questoes_seidig.py --start 31 --end 45  # Apenas SRAG
+    python backend/tests/benchmark_68_questoes_seidig.py
+    python backend/tests/benchmark_68_questoes_seidig.py --dataset covid-19-vacinacao
+    python backend/tests/benchmark_68_questoes_seidig.py --verbose
+    python backend/tests/benchmark_68_questoes_seidig.py --start 31 --end 45  # Apenas SRAG
 """
 
 import sys
@@ -30,12 +30,17 @@ from pathlib import Path
 from datetime import datetime
 import argparse
 import os
+import requests
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+BACKEND_DIR = PROJECT_ROOT / "backend"
 
 # Adicionar backend ao path
-sys.path.insert(0, str(Path(__file__).parent / "backend"))
+sys.path.insert(0, str(BACKEND_DIR))
 
 from routes.query import ask, AskRequest
 from metadata.loader import load_metadata
+from llm.router import get_model_identifier
 
 
 INTEROPERABILITY_GOLD = {
@@ -46,34 +51,34 @@ INTEROPERABILITY_GOLD = {
         "expected_relationships": ["srag_ubs_municipio_notificacao"],
         "reference_sql": """WITH srag_municipalities AS (SELECT DISTINCT co_mun_not AS ibge FROM srag), ubs_municipalities AS (SELECT DISTINCT ibge FROM atencao_basica) SELECT COUNT(*) AS total_municipios FROM srag_municipalities AS s INNER JOIN ubs_municipalities AS u ON s.ibge = u.ibge""",
         "reference_result": None,
-        "note": "Conta municípios com SRAG e cobertura de UBS usando o relacionamento municipal.",
+        "note": "Conta municípios com notificações de SRAG e UBS cadastradas usando o relacionamento municipal.",
     },
     62: {
-        "data_answerability": "partial",
+        "data_answerability": "full",
         "implementation_support": "supported",
         "expected_datasets": ["surtos-srag", "atencao-basica"],
         "expected_relationships": ["srag_ubs_municipio_notificacao"],
-        "reference_sql": None,
+        "reference_sql": """WITH srag_by_municipality AS (SELECT co_mun_not AS ibge, COUNT(*) AS total_srag FROM srag GROUP BY co_mun_not), ubs_by_municipality AS (SELECT ibge AS ibge, COUNT(DISTINCT cnes) AS total_ubs FROM atencao_basica GROUP BY ibge) SELECT s.ibge, s.total_srag, u.total_ubs FROM srag_by_municipality AS s INNER JOIN ubs_by_municipality AS u ON s.ibge = u.ibge ORDER BY s.total_srag DESC LIMIT 100""",
         "reference_result": None,
-        "note": "A cobertura exige denominador populacional; a formulação atual é parcial.",
+        "note": "Lista municípios com notificações de SRAG e quantidade de UBS usando relacionamento municipal.",
     },
     63: {
-        "data_answerability": "unavailable",
-        "implementation_support": "unsupported",
-        "expected_datasets": ["surtos-srag", "leitos", "atencao-basica"],
-        "expected_relationships": [],
+        "data_answerability": "full",
+        "implementation_support": "supported",
+        "expected_datasets": ["covid-19-vacinacao", "leitos"],
+        "expected_relationships": ["vacinacao_leitos_uf"],
         "reference_sql": None,
         "reference_result": None,
-        "note": "A regra de < 5 leitos por 10k hab exige população, ausente no conjunto atual.",
+        "note": "Compara registros de vacinação e leitos de UTI por UF usando relacionamento previamente cadastrado.",
     },
     64: {
-        "data_answerability": "partial",
-        "implementation_support": "unsupported",
-        "expected_datasets": ["covid-19-vacinacao", "surtos-srag"],
-        "expected_relationships": [],
+        "data_answerability": "full",
+        "implementation_support": "supported",
+        "expected_datasets": ["covid-19-vacinacao", "leitos"],
+        "expected_relationships": ["vacinacao_leitos_uf"],
         "reference_sql": None,
         "reference_result": None,
-        "note": "Incidência e cobertura exigem denominadores populacionais, ausentes no conjunto atual.",
+        "note": "Compara doses registradas e leitos de UTI por UF com pré-agregação dos dois lados.",
     },
     65: {
         "data_answerability": "partial",
@@ -91,16 +96,16 @@ INTEROPERABILITY_GOLD = {
         "expected_relationships": [],
         "reference_sql": None,
         "reference_result": None,
-        "note": "A métrica de internação em 7 dias pode ser respondida apenas se a base expuser datas compatíveis.",
+        "note": "Exige relacionamento SRAG–Leitos por UF ou município, ainda não cadastrado.",
     },
     67: {
-        "data_answerability": "unavailable",
+        "data_answerability": "partial",
         "implementation_support": "unsupported",
         "expected_datasets": ["atencao-basica", "covid-19-vacinacao"],
         "expected_relationships": [],
         "reference_sql": None,
         "reference_result": None,
-        "note": "A correlação em densidade por estado precisa de população ou de uma definição alternativa de densidade.",
+        "note": "Exige relacionamento UBS–Vacinação por UF ou município, ainda não cadastrado.",
     },
     68: {
         "data_answerability": "partial",
@@ -109,7 +114,7 @@ INTEROPERABILITY_GOLD = {
         "expected_relationships": [],
         "reference_sql": None,
         "reference_result": None,
-        "note": "O déficit de resposta depende de uma regra explícita para leitos insuficientes.",
+        "note": "Exige consulta envolvendo três domínios e regra explícita para baixa disponibilidade de leitos.",
     },
 }
 
@@ -215,6 +220,94 @@ def _compute_selection_metrics(results: list[dict]) -> dict:
     }
 
 
+def _next_versioned_path(path: Path) -> Path:
+    """Retorna path, path_V2, path_V3... sem sobrescrever resultados anteriores."""
+
+    if not path.exists():
+        return path
+
+    version = 2
+    while True:
+        candidate = path.with_name(f"{path.stem}_V{version}{path.suffix}")
+        if not candidate.exists():
+            return candidate
+        version += 1
+
+
+def _format_metric(value):
+    return value if value is not None else "n/a"
+
+
+def _build_summary_lines(
+    *,
+    total_questions: int,
+    total_passed: int,
+    controlled_limitations: int,
+    total_failed: int,
+    fully_answerable_executed: int,
+    fully_answerable_total: int,
+    partial_total: int,
+    unavailable_total: int,
+    supported_total: int,
+    evaluation_metrics: dict,
+    total_time: float,
+) -> list[str]:
+    dataset_metrics = evaluation_metrics.get("dataset_selection", {})
+    relationship_metrics = evaluation_metrics.get("relationship_selection", {})
+    lines = [
+        "RESUMO FINAL",
+        f"Total: {total_questions} questões testadas",
+        f"Sucessos: {total_passed} ({total_passed/total_questions*100:.1f}%)",
+        f"Limitações controladas: {controlled_limitations} ({controlled_limitations/total_questions*100:.1f}%)",
+        f"Falhas técnicas: {total_failed} ({total_failed/total_questions*100:.1f}%)",
+    ]
+    if fully_answerable_total:
+        lines.append(
+            "Execuções bem-sucedidas nas questões plenamente respondíveis: "
+            f"{fully_answerable_executed}/{fully_answerable_total} "
+            f"({fully_answerable_executed/fully_answerable_total*100:.1f}%)"
+        )
+    lines.extend([
+        f"Questões parciais: {partial_total}",
+        f"Questões indisponíveis com os dados atuais: {unavailable_total}",
+        f"Questões com suporte implementado: {supported_total}",
+    ])
+    if evaluation_metrics.get("evaluated"):
+        lines.extend([
+            "Seleção de datasets: "
+            f"P={_format_metric(dataset_metrics.get('precision'))} "
+            f"R={_format_metric(dataset_metrics.get('recall'))} "
+            f"F1={_format_metric(dataset_metrics.get('f1'))}",
+            "Seleção de relacionamentos: "
+            f"P={_format_metric(relationship_metrics.get('precision'))} "
+            f"R={_format_metric(relationship_metrics.get('recall'))} "
+            f"F1={_format_metric(relationship_metrics.get('f1'))}",
+        ])
+    lines.append(f"Tempo total: {total_time:.1f}s ({total_time/total_questions:.2f}s/questão)")
+    return lines
+
+
+def _check_ollama_model_available(model_name: str) -> tuple[bool, str, list[str]]:
+    """Verifica se o modelo resolvido está disponível no Ollama usado pelo backend."""
+
+    resolved_model = get_model_identifier(model_name)
+    ollama_host = os.getenv("OLLAMA_HOST", "http://localhost:11434").rstrip("/")
+    try:
+        response = requests.get(f"{ollama_host}/api/tags", timeout=10)
+        response.raise_for_status()
+        available = sorted(
+            model.get("name")
+            for model in response.json().get("models", [])
+            if model.get("name")
+        )
+    except Exception as exc:
+        raise RuntimeError(
+            f"Não foi possível consultar os modelos do Ollama em {ollama_host}: {exc}"
+        ) from exc
+
+    return resolved_model in available, resolved_model, available
+
+
 def parse_68_questions() -> dict:
     """
     Parse as 68 questões SEIDIG do markdown.
@@ -238,7 +331,7 @@ def parse_68_questions() -> dict:
         }
     """
     
-    markdown_file = Path(__file__).parent / "docs" / "PERGUNTAS_SEIDIG_68.md"
+    markdown_file = PROJECT_ROOT / "docs" / "PERGUNTAS_SEIDIG_68.md"
     
     if not markdown_file.exists():
         raise FileNotFoundError(f"Arquivo não encontrado: {markdown_file}")
@@ -334,7 +427,7 @@ def parse_68_questions() -> dict:
     return questions_dict
 
 
-def test_question(question_data: dict, verbose: bool = False) -> dict:
+def test_question(question_data: dict, model_name: str, verbose: bool = False) -> dict:
     """
     Testa uma pergunta individual.
     
@@ -367,6 +460,7 @@ def test_question(question_data: dict, verbose: bool = False) -> dict:
         "reference_sql": question_data.get("reference_sql"),
         "reference_result": question_data.get("reference_result"),
         "benchmark_note": question_data.get("note"),
+        "model": model_name,
         "status": "pending",
         "sql_generated": None,
         "execution_time": 0,
@@ -381,7 +475,7 @@ def test_question(question_data: dict, verbose: bool = False) -> dict:
 
         request = AskRequest(
             question=question_data["question"],
-            model="deepseek-local",
+            model=model_name,
             dataset=use_endpoint_dataset,
         )
 
@@ -402,33 +496,47 @@ def test_question(question_data: dict, verbose: bool = False) -> dict:
             result["sql_generation_mode"] = response.get("sql_generation_mode")
             result["validation"] = response.get("validation")
             result["timing_s"] = response.get("timing_s")
+            result["answerability"] = response.get("answerability")
+            result["evaluation_metrics"] = response.get("evaluation_metrics")
 
             if response.get("success"):
                 result["status"] = "success"
+            elif (
+                question_data.get("implementation_support") == "unsupported"
+                or question_data.get("data_answerability") in {"partial", "unavailable"}
+            ):
+                result["status"] = "controlled_limitation"
+                result["error_message"] = data.get("error") if isinstance(data, dict) else "Limitação prevista no gabarito"
             else:
                 result["status"] = "error"
                 result["error_message"] = data.get("error") if isinstance(data, dict) else "Falha no endpoint"
 
             if verbose:
-                print("✓" if result["status"] == "success" else "✗")
+                print("OK" if result["status"] == "success" else "FAIL")
 
             return result
 
         result["status"] = "error"
         result["error_message"] = "Resposta inválida do endpoint"
         if verbose:
-            print("✗")
+            print("FAIL")
         return result
     
     except Exception as e:
         result["status"] = "error"
         result["error_message"] = str(e)
         if verbose:
-            print(f"✗")
+            print("FAIL")
         return result
 
 
-def run_test_suite(dataset_filter: str = None, start_q: int = None, end_q: int = None, verbose: bool = False):
+def run_test_suite(
+    dataset_filter: str = None,
+    start_q: int = None,
+    end_q: int = None,
+    verbose: bool = False,
+    model_name: str = "deepseek-local",
+):
     """
     Executa suite de teste das 68 questões SEIDIG.
     
@@ -439,12 +547,30 @@ def run_test_suite(dataset_filter: str = None, start_q: int = None, end_q: int =
         verbose: Output detalhado
     """
     
-    print(f"📖 Carregando 68 Questões SEIDIG...")
+    resolved_model = get_model_identifier(model_name)
+    try:
+        model_available, resolved_model, available_models = _check_ollama_model_available(model_name)
+    except RuntimeError as exc:
+        print(f"Erro: {exc}")
+        return
+
+    if not model_available:
+        print("Modelo LLM não disponível no Ollama usado pelo backend.")
+        print(f"   Modelo solicitado: {model_name}")
+        print(f"   Modelo resolvido: {resolved_model}")
+        print("   Modelos disponíveis nesse Ollama:")
+        for available_model in available_models:
+            print(f"   - {available_model}")
+        print("\nInstale o modelo nesse mesmo Ollama antes de rodar o benchmark.")
+        print(f"Exemplo: ollama pull {resolved_model}")
+        return
+
+    print("Carregando 68 Questões SEIDIG...")
     
     try:
         test_questions = parse_68_questions()
     except Exception as e:
-        print(f"❌ Erro ao parsear questões: {e}")
+        print(f"Erro ao parsear questões: {e}")
         return
     
     # Montar lista de questões para testar
@@ -462,13 +588,15 @@ def run_test_suite(dataset_filter: str = None, start_q: int = None, end_q: int =
         all_questions = [q for q in all_questions if start_q <= q["id"] <= end_q]
     
     if not all_questions:
-        print("❌ Nenhuma questão para testar com os filtros aplicados")
+        print("Nenhuma questão para testar com os filtros aplicados")
         return
     
     # Executar testes
     print(f"\n{'='*100}")
-    print(f"🧪 TESTE DE 68 QUESTÕES SEIDIG")
+    print("TESTE DE 68 QUESTÕES SEIDIG")
     print(f"{'='*100}")
+    print(f"Modelo LLM: {model_name}")
+    print(f"Modelo Ollama resolvido: {resolved_model}")
     print(f"Total de questões: {len(all_questions)}\n")
     
     all_results = []
@@ -485,22 +613,13 @@ def run_test_suite(dataset_filter: str = None, start_q: int = None, end_q: int =
     for dataset, questions in sorted(questions_by_dataset.items()):
         print(f"\n{'─'*100}")
         
-        # Mapa de emojis
-        emoji_map = {
-            "covid-19-vacinacao": "💉",
-            "atencao-basica": "🏘️",
-            "surtos-srag": "🦠",
-            "leitos": "🛏️",
-            "interoperabilidade": "🔗"
-        }
-        
-        emoji = emoji_map.get(dataset, "📊")
-        print(f"{emoji} Dataset: {dataset}")
+        print(f"Dataset: {dataset}")
         print(f"{'─'*100}")
         
         dataset_results = []
         passed = 0
         failed = 0
+        controlled = 0
         
         for idx, question in enumerate(questions, 1):
             q_id = question["id"]
@@ -513,71 +632,78 @@ def run_test_suite(dataset_filter: str = None, start_q: int = None, end_q: int =
             else:
                 print(f"Q{q_id:02d} | {question['question'][:60]:60s} | {comp:8s} | ", end="", flush=True)
             
-            result = test_question(question, verbose=verbose)
+            result = test_question(question, model_name=model_name, verbose=verbose)
             
             if not verbose:
-                status_emoji = "✅" if result["status"] == "success" else "❌"
-                print(f"{status_emoji} {result['status']}")
+                status_label = {
+                    "success": "success",
+                    "controlled_limitation": "controlled_limitation",
+                }.get(result["status"], "error")
+                print(status_label)
             
             if result["status"] == "success":
                 passed += 1
+            elif result["status"] == "controlled_limitation":
+                controlled += 1
             else:
                 failed += 1
             
             dataset_results.append(result)
             all_results.append(result)
         
-        print(f"\nResultado: {passed}/{len(questions)} ✅")
+        print(f"\nResultado: {passed}/{len(questions)} success | {controlled} controlled_limitation | {failed} error")
     
     # Resumo final
     total_time = time.time() - start_time_total
     total_passed = sum(1 for r in all_results if r["status"] == "success")
-    total_failed = len(all_results) - total_passed
+    controlled_limitations = sum(1 for r in all_results if r["status"] == "controlled_limitation")
+    total_failed = len(all_results) - total_passed - controlled_limitations
     fully_answerable_results = [r for r in all_results if r.get("data_answerability") == "full"]
     partial_results = [r for r in all_results if r.get("data_answerability") == "partial"]
     unavailable_results = [r for r in all_results if r.get("data_answerability") == "unavailable"]
     supported_results = [r for r in all_results if r.get("implementation_support") == "supported"]
     fully_answerable_executed = sum(1 for r in fully_answerable_results if r["status"] == "success")
     evaluation_metrics = _compute_selection_metrics(all_results)
+    summary_lines = _build_summary_lines(
+        total_questions=len(all_results),
+        total_passed=total_passed,
+        controlled_limitations=controlled_limitations,
+        total_failed=total_failed,
+        fully_answerable_executed=fully_answerable_executed,
+        fully_answerable_total=len(fully_answerable_results),
+        partial_total=len(partial_results),
+        unavailable_total=len(unavailable_results),
+        supported_total=len(supported_results),
+        evaluation_metrics=evaluation_metrics,
+        total_time=total_time,
+    )
     
     print(f"\n{'='*100}")
-    print(f"📊 RESUMO FINAL")
+    print(summary_lines[0])
     print(f"{'='*100}")
-    print(f"Total: {len(all_results)} questões testadas")
-    print(f"✅ Sucessos: {total_passed} ({total_passed/len(all_results)*100:.1f}%)")
-    print(f"❌ Falhas: {total_failed} ({total_failed/len(all_results)*100:.1f}%)")
-    if fully_answerable_results:
-        print(f"🎯 Execuções bem-sucedidas nas questões plenamente respondíveis: {fully_answerable_executed}/{len(fully_answerable_results)} ({fully_answerable_executed/len(fully_answerable_results)*100:.1f}%)")
-    print(f"🟨 Questões parciais: {len(partial_results)}")
-    print(f"🟥 Questões indisponíveis com os dados atuais: {len(unavailable_results)}")
-    print(f"🧩 Questões com suporte implementado: {len(supported_results)}")
-    if evaluation_metrics.get("evaluated"):
-        dataset_metrics = evaluation_metrics.get("dataset_selection", {})
-        relationship_metrics = evaluation_metrics.get("relationship_selection", {})
-        print(
-            "📐 Seleção de datasets: "
-            f"P={dataset_metrics.get('precision') if dataset_metrics.get('precision') is not None else 'n/a'} "
-            f"R={dataset_metrics.get('recall') if dataset_metrics.get('recall') is not None else 'n/a'} "
-            f"F1={dataset_metrics.get('f1') if dataset_metrics.get('f1') is not None else 'n/a'}"
-        )
-        print(
-            "🔗 Seleção de relacionamentos: "
-            f"P={relationship_metrics.get('precision') if relationship_metrics.get('precision') is not None else 'n/a'} "
-            f"R={relationship_metrics.get('recall') if relationship_metrics.get('recall') is not None else 'n/a'} "
-            f"F1={relationship_metrics.get('f1') if relationship_metrics.get('f1') is not None else 'n/a'}"
-        )
-    print(f"⏱️  Tempo total: {total_time:.1f}s ({total_time/len(all_results):.2f}s/questão)")
+    for line in summary_lines[1:]:
+        print(line)
     
     # Salvar resultados
-    results_file = Path(__file__).parent / "test_results_68_questoes.json"
+    experiments_dir = PROJECT_ROOT / "experimentos"
+    experiments_dir.mkdir(exist_ok=True)
+    results_file = _next_versioned_path(experiments_dir / "test_results_68_questoes.json")
     with open(results_file, 'w', encoding='utf-8') as f:
         json.dump({
             "timestamp": datetime.now().isoformat(),
             "sql_generation_strategy": os.getenv("SQL_GENERATION_STRATEGY", "llm_first"),
+            "model": model_name,
+            "model_alias": model_name,
+            "resolved_model": resolved_model,
+            "experiment_valid_for_model_comparison": True,
+            "experiment_summary_comment": "\n".join(summary_lines),
+            "summary_lines": summary_lines,
             "total_questions": len(all_results),
             "passed": total_passed,
+            "controlled_limitations": controlled_limitations,
             "failed": total_failed,
             "success_rate": total_passed / len(all_results),
+            "technical_failure_rate": total_failed / len(all_results),
             "fully_answerable_total": len(fully_answerable_results),
             "fully_answerable_executed": fully_answerable_executed,
             "fully_answerable_execution_rate": (fully_answerable_executed / len(fully_answerable_results)) if fully_answerable_results else None,
@@ -589,7 +715,7 @@ def run_test_suite(dataset_filter: str = None, start_q: int = None, end_q: int =
             "results": all_results
         }, f, ensure_ascii=False, indent=2)
     
-    print(f"\n💾 Resultados salvos: {results_file}")
+    print(f"\nResultados salvos: {results_file}")
 
 
 def main():
@@ -598,6 +724,11 @@ def main():
     parser.add_argument("--start", type=int, help="Primeira questão (número)")
     parser.add_argument("--end", type=int, help="Última questão (número)")
     parser.add_argument("--verbose", "-v", action="store_true", help="Output detalhado")
+    parser.add_argument(
+        "--model",
+        default="deepseek-local",
+        help="Modelo LLM usado no endpoint /api/ask, por exemplo: deepseek-local, deepseek-r1:7b ou deepseek-coder:latest",
+    )
     parser.add_argument(
         "--generation-strategy",
         choices=["llm_first", "deterministic_first"],
@@ -612,7 +743,8 @@ def main():
         dataset_filter=args.dataset,
         start_q=args.start,
         end_q=args.end,
-        verbose=args.verbose
+        verbose=args.verbose,
+        model_name=args.model,
     )
 
 

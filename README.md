@@ -1,190 +1,90 @@
-<div align="center">
-<h1>EasyDataSUS</h1>
+# EasyDataSUS
 
-[![License](https://img.shields.io/github/license/Jinkogule/EasyDataSUS?style=for-the-badge)](LICENSE)
-![Status](https://img.shields.io/badge/STATUS-IN%20|%20IN%20DEVELOPMENT-brightgreen?style=for-the-badge)
-</div>
+Natural-language query system for selected public health datasets from DataSUS. The backend selects datasets, retrieves semantic metadata, generates read-only SQL, validates the query, executes it in ClickHouse and returns factual responses with execution/evaluation metadata.
 
-<p align="center">
-  <a href="#-about-the-project">About</a> •
-  <a href="#-documentation">Documentation</a> •
-  <a href="#-development">Development</a> •
-  <a href="#-technologies">Technologies</a> •
-  <a href="#-run-the-project-locally">Run the project locally</a> •
-  <a href="#-authors">Authors</a> •
-  <a href="#-license">License</a>
-  <br>
-  <a href="./README.pt-BR.md">Português (BR)</a> •
-  <a href="./README.md">English</a>
-</p>
+## Current scope
 
----
+Supported datasets:
 
-## 💻 About the Project
+| Dataset | ClickHouse table |
+|---|---|
+| `covid-19-vacinacao` | `vacinacao` |
+| `leitos` | `leitos` |
+| `surtos-srag` | `srag` |
+| `atencao-basica` | `atencao_basica` |
 
-**EasyDataSUS** is a query system developed to facilitate access to and utilization of public health data in Brazil, especially for managers and professionals who do not have technical training in data analysis.
+Supported cross-dataset relationships:
 
-The system allows questions to be asked in natural language, automatically translating them into SQL queries, executing them against an analytical database, and presenting the results in an interpreted format. This reduces the need for technical knowledge about database structures or query languages. The solution was designed with a scalable architecture and support for multiple health-related datasets.
+| Relationship | Datasets |
+|---|---|
+| `vacinacao_leitos_uf` | vaccination + hospital beds |
+| `srag_ubs_municipio_notificacao` | SARI/SRAG + primary care facilities |
 
-This project was developed to evaluate a tool that reduces technical barriers to the use of public health data, enabling managers, researchers, and citizens to obtain relevant information from DataSUS data. Additionally, the project investigates the impact of different language models and metadata structures on the quality and accuracy of generated responses.
+## Setup
 
-## 📋 Documentation
+From the project root:
 
--   **[Wiki](https://github.com/Jinkogule/EasyDataSUS/wiki)**
-
-## 🧑‍💻 Development
-
--   **[Source Code](https://github.com/Jinkogule/EasyDataSUS)**
--   **[Issue Tracking](https://github.com/Jinkogule/EasyDataSUS/issues)**
-
-## 🛠 Technologies
-
-### **Backend (API)**
-
--   **[Python 3.10+](https://www.python.org)**
--   **[FastAPI 0.104.1](https://fastapi.tiangolo.com/)**
-
-### **Database**
-
--   **[ClickHouse 24.3.3](https://clickhouse.com/)** - OLAP TimeSeries Database
-
-### **Language Models**
-
--   **[Ollama 0.2.0](https://ollama.ai/)** - Local LLM Inference
-    - DeepSeek Coder 6.7B (SQL generation)
-    - Mistral 7B (Fast inference)
-    - Neural Chat (Portuguese optimized)
-    - Orca Mini (Lightweight)
-
-### **Infrastructure**
-
--   **[Docker & Docker Compose](https://www.docker.com/)** - Containerization and orchestration
-
-## ⚙ Run the Project Locally
-
-### **Prerequisites**
-
-Before you begin, make sure to:
-
--   Install **[Git](https://git-scm.com/)**.
--   Install **[Docker Desktop](https://www.docker.com/products/docker-desktop/)** (includes Docker Compose).
--   Install **[Python 3.10+](https://www.python.org/)**.
--   Have **15 GB of free disk space** (for LLM models + database).
--   Verify installations:
-    ```bash
-    docker --version
-    docker-compose --version
-    python --version
-    ```
-
-### **Running the Application**
-
-1. **Clone this repository**
-```bash
-git clone https://github.com/Jinkogule/EasyDataSUS.git
-cd EasyDataSUS
-```
-
-2. **Start Docker containers**
-```bash
+```powershell
 docker-compose up -d
 ```
 
-Verify status:
-```bash
-docker-compose ps
-```
+Inside `backend`:
 
-3. **Setup Python environment**
-```bash
-cd backend
-python -m venv venv
-.\venv\Scripts\Activate.ps1  # Windows PowerShell
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-```
-
-Create `.env`:
-```env
-CLICKHOUSE_HOST=localhost
-CLICKHOUSE_PORT=8123
-CLICKHOUSE_USER=admin
-CLICKHOUSE_PASSWORD=admin
-CLICKHOUSE_DATABASE=default
-
-OLLAMA_HOST=http://localhost:11434
-OLLAMA_MODEL=deepseek-coder:6.7b-base-q4_K_M
-OLLAMA_TIMEOUT=180
-
-FASTAPI_HOST=localhost
-FASTAPI_PORT=8000
-```
-
-4. **Download LLM model**
-```bash
-docker exec easydatasus-ollama ollama pull deepseek-coder:6.7b-base-q4_K_M
-```
-
-Warmup (REQUIRED):
-```bash
-docker exec easydatasus-ollama ollama run deepseek-coder:6.7b-base-q4_K_M "Hello"
-```
-
-5. **Load dataset and start**
-```bash
 python etl/load_csv.py
-# Replaces and reloads every configured dataset.
-# Use --dataset leitos to replace only the hospital-beds table.
 python main.py
 ```
 
-✅ System ready at: `http://localhost:8000`
+`python etl/load_csv.py` clears and reloads every configured dataset. To reload a single dataset:
 
-6. **Test the system**
-```bash
-curl -X POST "http://localhost:8000/api/ask" \
-  -H "Content-Type: application/json" \
-  -d '{"question": "How many vaccines were applied in SP?"}'
+```powershell
+python etl/load_csv.py --dataset leitos
 ```
 
-Expected response:
-```json
-{
-  "sql": "SELECT COUNT(*) FROM vacinacao WHERE paciente_endereco_uf = 'SP'",
-  "insight": "In São Paulo, 824,915 vaccine doses were applied."
-}
+## Ask a question
+
+```powershell
+curl -X POST "http://localhost:8000/api/ask" `
+  -H "Content-Type: application/json" `
+  -d "{\"question\":\"Quantas doses de vacina contra a COVID-19 foram registradas no conjunto de dados carregado?\"}"
 ```
 
----
+Responses include `sql`, `data`, `insight`, `timing_s` and `evaluation_metrics`.
 
-## ✒ Authors
+## Run the 68-question benchmark
 
-<table>
-  <tr>
-    <td align="center">
-      Lucas Pimenta
-      <br>
-      <a href="https://github.com/Jinkogule">
-        <img src="https://avatars.githubusercontent.com/u/52849575?v=4" width="100px;" alt="Lucas Pimenta"/>
-      </a>
-      <br>
-      <a href="https://github.com/Jinkogule">
-        <img src="https://img.shields.io/badge/-Github-black?style=flat-square&logo=Github&logoColor=white">
-      </a>
-    </td>
-    <td align="center">
-      Flávio Seixas
-      <br>
-      <a href="http://lattes.cnpq.br/4319951805195534">
-        <img src="https://www.w3schools.com/w3images/avatar2.png" width="100px;" alt="Flávio Seixas"/>
-      </a>
-      <br>
-      <a href="http://lattes.cnpq.br/4319951805195534">
-        <img src="https://img.shields.io/badge/-Lattes-black?style=flat-square&logo=GoogleScholar&logoColor=white">
-      </a>
-    </td>
-  </tr>
-</table>
+From the project root:
 
-## 📝 License
+```powershell
+python backend/tests/benchmark_68_questoes_seidig.py
+```
 
-This project is licensed under the **[MIT](./LICENSE)** license.
+Examples:
+
+```powershell
+python backend/tests/benchmark_68_questoes_seidig.py --start 61 --end 68
+python backend/tests/benchmark_68_questoes_seidig.py --dataset leitos
+```
+
+The aggregated result is saved as `test_results_68_questoes.json`.
+
+## Automated tests
+
+```powershell
+python -m pytest backend/tests
+```
+
+## Documentation
+
+Current documentation is in `docs`:
+
+- `docs/SISTEMA_ATUAL.md`
+- `docs/EXPERIMENTOS_METRICAS.md`
+- `docs/PERGUNTAS_SEIDIG_68.md`
+
+## License
+
+MIT.

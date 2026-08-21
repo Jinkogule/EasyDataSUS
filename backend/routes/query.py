@@ -3,7 +3,7 @@ from pydantic import BaseModel
 import logging
 import re
 import time
-from typing import Optional, List, Dict, Tuple
+from typing import Optional, List, Dict, Tuple, Any
 
 from services.sql_service import fallback_sql, generate_sql, validate_sql_syntax
 from db.clickhouse import run_query
@@ -30,6 +30,89 @@ class AskRequest(BaseModel):
     dataset: Optional[str] = None  # ← NOVO: Suporte a múltiplos datasets
 
 
+def _build_evaluation_metrics(response: Dict[str, Any]) -> Dict[str, Any]:
+    """Monta métricas automáticas e campos pendentes de gabarito para experimentos."""
+
+    data = response.get("data")
+    validation = response.get("validation") or {}
+    answerability = response.get("answerability") or {}
+    timing = response.get("timing_s") or {}
+    columns = response.get("columns") or []
+    datasets = response.get("datasets") or []
+    relationships = response.get("relationships") or []
+    sql = response.get("sql")
+    success = bool(response.get("success"))
+
+    row_count = len(data) if isinstance(data, list) else 0
+    execution_error = data.get("error") if isinstance(data, dict) else None
+    sql_valid = bool(validation.get("valid"))
+    query_executed = success and execution_error is None
+
+    if answerability.get("answerable") is False:
+        failure_stage = "answerability"
+    elif success:
+        failure_stage = None
+    elif not sql_valid:
+        failure_stage = "sql_validation"
+    elif execution_error:
+        failure_stage = "database_execution"
+    else:
+        failure_stage = "processing"
+
+    return {
+        "ready_for_experiment": True,
+        "automatic_metrics": {
+            "success": success,
+            "sql_valid": sql_valid,
+            "query_executed": query_executed,
+            "answerable": answerability.get("answerable", True),
+            "has_sql": bool(sql),
+            "has_result_rows": row_count > 0,
+            "row_count": row_count,
+            "column_count": len(columns),
+            "dataset_count": len(datasets),
+            "relationship_count": len(relationships),
+            "cross_dataset": bool(response.get("cross_dataset")),
+            "llm_sql_attempted": bool(response.get("llm_sql_attempted")),
+            "response_has_insight": bool((response.get("insight") or "").strip()),
+            "response_has_factual_summary": bool((response.get("factual_summary") or "").strip()),
+            "warning_count": len(response.get("warnings") or []),
+            "failure_stage": failure_stage,
+            "total_time_s": timing.get("total"),
+        },
+        "generation": {
+            "routing_mode": response.get("routing_mode"),
+            "sql_generation_mode": response.get("sql_generation_mode"),
+            "interpretation_mode": response.get("interpretation_mode"),
+        },
+        "selected": {
+            "datasets": datasets,
+            "relationships": relationships,
+            "tables": validation.get("tables", []),
+            "joins": validation.get("joins", []),
+        },
+        "reference_dependent_metrics": {
+            "expected_datasets": None,
+            "dataset_selection_exact_match": None,
+            "expected_relationships": None,
+            "relationship_selection_exact_match": None,
+            "expected_sql": None,
+            "exact_match": None,
+            "expected_result": None,
+            "execution_accuracy": None,
+            "response_fidelity": None,
+        },
+        "notes": [
+            "Métricas como Exact Match, Execution Accuracy, seleção correta de datasets/relacionamentos e fidelidade da resposta dependem de gabarito externo."
+        ],
+    }
+
+
+def _append_evaluation_metrics(response: Dict[str, Any]) -> Dict[str, Any]:
+    response["evaluation_metrics"] = _build_evaluation_metrics(response)
+    return response
+
+
 def _error_response(
     question: str,
     datasets: List[str],
@@ -40,11 +123,13 @@ def _error_response(
     relationships: Optional[List[str]] = None,
     validation: Optional[Dict[str, object]] = None,
     sql: Optional[str] = None,
+    analytical_limitations: Optional[List[str]] = None,
+    answerability: Optional[Dict[str, object]] = None,
 ) -> Dict[str, object]:
     """Mantém o mesmo contrato básico de resposta em todos os erros."""
 
     selected = datasets or ["unknown"]
-    return {
+    return _append_evaluation_metrics({
         "question": question,
         "dataset": ",".join(selected),
         "datasets": selected,
@@ -57,13 +142,50 @@ def _error_response(
         "sql": sql,
         "columns": [],
         "highlights": [],
-        "warnings": [],
+        "analytical_limitations": analytical_limitations or [],
+        "warnings": analytical_limitations or [],
         "data": {"error": message},
         "insight": insight,
         "factual_summary": "",
         "interpretation_mode": "none",
+        "answerability": answerability or {"answerable": False, "reason": message},
         "success": False,
-    }
+    })
+
+
+def _detect_unanswerable_request(question: str, datasets: List[str]) -> Optional[str]:
+    """Detecta perguntas que exigem dados não disponíveis no ambiente analítico atual."""
+
+    normalized = question.lower()
+    vaccination_coverage_terms = (
+        "cobertura vacinal",
+        "taxa de cobertura",
+        "% da população",
+        "percentual da população",
+        "população vacinada",
+        "populacao vacinada",
+    )
+    asks_vaccination_coverage = (
+        "covid" in normalized
+        and "covid-19-vacinacao" in datasets
+        and any(term in normalized for term in vaccination_coverage_terms)
+    )
+    if asks_vaccination_coverage:
+        return (
+            "A base de vacinação carregada contém registros de doses aplicadas, "
+            "mas não contém denominador populacional. Portanto, ela permite contar "
+            "registros ou doses, mas não calcular cobertura vacinal como percentual da população."
+        )
+
+    return None
+
+
+def _dataset_scope_notes(datasets: List[str]) -> List[str]:
+    return [
+        DATASETS_CONFIG[dataset].get("data_scope_note")
+        for dataset in datasets
+        if DATASETS_CONFIG.get(dataset, {}).get("data_scope_note")
+    ]
 
 
 def _detect_candidate_datasets(question: str) -> List[str]:
@@ -303,7 +425,7 @@ def ask(req: AskRequest):
     ```
     """
     
-    # ========== TIMING SETUP ==========
+    # Métricas de tempo.
     time_start = time.time()
     timings = {
         "total_start": time_start,
@@ -338,13 +460,32 @@ def ask(req: AskRequest):
             cross_dataset = len(selected_datasets) > 1
             routing_mode = selection.routing_mode
 
+            unsupported_reason = _detect_unanswerable_request(req.question, selected_datasets)
+            if unsupported_reason:
+                limitations = _dataset_scope_notes(selected_datasets) + [unsupported_reason]
+                return _error_response(
+                    req.question,
+                    selected_datasets,
+                    "Pergunta não respondível com as bases carregadas",
+                    unsupported_reason,
+                    routing_mode=routing_mode,
+                    sql_generation_mode="none",
+                    analytical_limitations=limitations,
+                    answerability={
+                        "answerable": False,
+                        "reason": unsupported_reason,
+                        "missing_data": ["denominador populacional"],
+                    },
+                )
+
             if cross_dataset:
                 stage_start = time.time()
                 relationships = relationship_service.find_relationships(selected_datasets)
                 timings["stages"]["relationship_lookup"] = time.time() - stage_start
 
                 if not relationships:
-                    return {
+                    limitation = "Não há relacionamento semântico validado para montar essa consulta entre as bases selecionadas."
+                    return _append_evaluation_metrics({
                         "question": req.question,
                         "dataset": ",".join(selected_datasets),
                         "datasets": selected_datasets,
@@ -355,11 +496,16 @@ def ask(req: AskRequest):
                         "validation": {"valid": False, "tables": [], "joins": [], "errors": ["Nenhum relacionamento cadastrado para as bases selecionadas"]},
                         "columns": [],
                         "highlights": [],
-                        "warnings": [],
+                        "warnings": [limitation],
                         "data": {"error": "Não há relacionamento cadastrado para as bases selecionadas."},
-                        "insight": "Não há um relacionamento validado para montar essa consulta entre bases.",
+                        "insight": limitation,
+                        "answerability": {
+                            "answerable": False,
+                            "reason": limitation,
+                            "missing_data": ["relacionamento semântico validado entre as bases selecionadas"],
+                        },
                         "success": False,
-                    }
+                    })
 
                 relationships_used = [relationship.id for relationship in relationships]
                 question_lower = req.question.lower()
@@ -403,7 +549,7 @@ def ask(req: AskRequest):
                     if raw_sql:
                         sql_generation_mode = "deterministic_fallback"
                     else:
-                        return {
+                        return _append_evaluation_metrics({
                             "question": req.question,
                             "dataset": ",".join(selected_datasets),
                             "datasets": selected_datasets,
@@ -418,7 +564,7 @@ def ask(req: AskRequest):
                             "data": {"error": "Não foi possível gerar SQL multibase."},
                             "insight": "Não foi possível gerar uma consulta multibase válida.",
                             "success": False,
-                        }
+                        })
 
                 stage_start = time.time()
                 sql = sanitize_sql(raw_sql)
@@ -430,18 +576,18 @@ def ask(req: AskRequest):
                 timings["stages"]["validation"] = time.time() - stage_start
 
                 if not validation_result.valid:
-                    fallback_sql = multibase_service.build_deterministic_fallback_sql(
+                    multibase_fallback_sql = multibase_service.build_deterministic_fallback_sql(
                         selected_datasets,
                         relationships,
                         req.question,
                     )
-                    if fallback_sql:
-                        sql = sanitize_sql(fallback_sql)
+                    if multibase_fallback_sql:
+                        sql = sanitize_sql(multibase_fallback_sql)
                         sql = multibase_service.canonicalize_sql_identifiers(sql, selected_datasets)
                         validation_result = multibase_service.validate_sql(sql, selected_datasets, relationships)
                         sql_generation_mode = "deterministic_fallback"
                     if not validation_result.valid:
-                        return {
+                        return _append_evaluation_metrics({
                             "question": req.question,
                             "dataset": ",".join(selected_datasets),
                             "datasets": selected_datasets,
@@ -461,7 +607,7 @@ def ask(req: AskRequest):
                             "data": {"error": "SQL multibase inválido"},
                             "insight": "A consulta multibase não passou na validação estrutural.",
                             "success": False,
-                        }
+                        })
 
                 validation_payload = {
                     "valid": validation_result.valid,
@@ -476,7 +622,7 @@ def ask(req: AskRequest):
                 timings["stages"]["database_execution"] = time.time() - stage_start
 
                 if isinstance(result, dict) and "error" in result:
-                    return {
+                    return _append_evaluation_metrics({
                         "question": req.question,
                         "dataset": ",".join(selected_datasets),
                         "datasets": selected_datasets,
@@ -492,7 +638,7 @@ def ask(req: AskRequest):
                         "data": result,
                         "insight": f"Erro ao executar a consulta multibase: {result.get('message', result['error'])}",
                         "success": False,
-                    }
+                    })
 
                 stage_start = time.time()
                 factual_summary = build_factual_summary(sql, result, req.question)
@@ -521,7 +667,7 @@ def ask(req: AskRequest):
                 time_total = time.time() - time_start
                 timings["total_ms"] = round(time_total * 1000, 2)
 
-                return {
+                return _append_evaluation_metrics({
                     "question": req.question,
                     "dataset": ",".join(selected_datasets),
                     "datasets": selected_datasets,
@@ -557,11 +703,29 @@ def ask(req: AskRequest):
                         "interpretation_llm": round(timings["stages"].get("interpretation", 0), 2),
                         "total": round(timings["total_ms"] / 1000, 2),
                     },
-                }
+                })
 
             if selected_datasets:
                 dataset_to_use = selected_datasets[0]
                 logger.info(f"Dataset detectado automaticamente: {dataset_to_use}")
+
+        unsupported_reason = _detect_unanswerable_request(req.question, [dataset_to_use])
+        if unsupported_reason:
+            limitations = _dataset_scope_notes([dataset_to_use]) + [unsupported_reason]
+            return _error_response(
+                req.question,
+                [dataset_to_use],
+                "Pergunta não respondível com a base carregada",
+                unsupported_reason,
+                routing_mode=routing_mode,
+                sql_generation_mode="none",
+                analytical_limitations=limitations,
+                answerability={
+                    "answerable": False,
+                    "reason": unsupported_reason,
+                    "missing_data": ["denominador populacional"],
+                },
+            )
         
         # Carregar metadata do dataset
         try:
@@ -577,7 +741,7 @@ def ask(req: AskRequest):
                 routing_mode=routing_mode,
             )
         
-        # ========== 1. GERAR SQL COM LLM ==========
+        # Geração de SQL.
         stage_start = time.time()
         logger.info("Gerando SQL...")
         raw_sql, sql_generation_mode = generate_sql(
@@ -603,7 +767,7 @@ def ask(req: AskRequest):
         
         logger.debug(f"SQL gerado (raw): {raw_sql}")
         
-        # ========== 2. SANITIZAR ==========
+        # Sanitização.
         stage_start = time.time()
         logger.info("Sanitizando SQL...")
         sql = sanitize_sql(raw_sql)
@@ -615,7 +779,7 @@ def ask(req: AskRequest):
         timings["stages"]["sanitization"] = time_sanitization
         logger.debug(f"SQL sanitizado: {sql}")
         
-        # ========== 3. VALIDAR ==========
+        # Validação.
         stage_start = time.time()
         logger.info("Validando SQL...")
         single_validation = multibase_service.validate_sql(sql, [dataset_to_use], [])
@@ -673,14 +837,14 @@ def ask(req: AskRequest):
         time_validation = time.time() - stage_start
         timings["stages"]["validation"] = time_validation
         
-        # ========== 4. EXECUTAR NO CLICKHOUSE ==========
+        # Execução no ClickHouse.
         stage_start = time.time()
         logger.info("Executando query no ClickHouse...")
         result = run_query(sql)
         time_database = time.time() - stage_start
         timings["stages"]["database_execution"] = time_database
         
-        # Verificar se houve erro
+        # Tratamento de erro de execução.
         if isinstance(result, dict) and "error" in result:
             logger.error(f"Erro na execução: {result['error']}")
             return _error_response(
@@ -696,7 +860,7 @@ def ask(req: AskRequest):
         
         logger.info(f"Query executada com sucesso. Resultado: {len(result)} linhas")
         
-        # ========== 5. INTERPRETAR RESULTADO COM LLM ==========
+        # Interpretação do resultado.
         stage_start = time.time()
         logger.info("Interpretando resultado...")
         factual_summary = build_factual_summary(sql, result, req.question)
@@ -720,11 +884,11 @@ def ask(req: AskRequest):
         time_interpretation = time.time() - stage_start
         timings["stages"]["interpretation"] = time_interpretation
         
-        # ========== CALCULAR TEMPOS TOTAIS ==========
+        # Tempo total.
         time_total = time.time() - time_start
         timings["total_ms"] = round(time_total * 1000, 2)
         
-        # ========== PRINT TIMING REPORT NO TERMINAL ==========
+        # Relatório de tempo no terminal.
         print("\n" + "="*70)
         print(f"TIMING REPORT - {req.model.upper()}")
         print("="*70)
@@ -740,7 +904,7 @@ def ask(req: AskRequest):
         print(f"  TOTAL:                       {timings['total_ms']/1000:>8.2f} s")
         print("="*70 + "\n")
         
-        # ========== LOG DETALHADO ==========
+        # Log resumido de desempenho.
         logger.info(f"Timing - SQL Gen: {timings['stages']['sql_generation']:.2f}s, "
                    f"Sanitization: {timings['stages']['sanitization']:.2f}s, "
                    f"Validation: {timings['stages']['validation']:.2f}s, "
@@ -748,7 +912,7 @@ def ask(req: AskRequest):
                    f"Interpretation: {timings['stages']['interpretation']:.2f}s, "
                    f"TOTAL: {timings['total_ms']/1000:.2f}s")
         
-        return {
+        return _append_evaluation_metrics({
             "question": req.question,
             "dataset": dataset_to_use,
             "datasets": [dataset_to_use],
@@ -787,7 +951,7 @@ def ask(req: AskRequest):
                 "interpretation_llm": round(timings['stages']['interpretation'], 2),
                 "total": round(timings['total_ms']/1000, 2)
             }
-        }
+        })
     
     except Exception as e:
         logger.exception(f"Erro inesperado: {e}")

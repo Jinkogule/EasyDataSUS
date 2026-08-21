@@ -1,146 +1,62 @@
-# ============================================================================
-# EasyDataSUS - Repository Exclusions
-# ============================================================================
-
-# ============================================================================
-# Python Environment & Dependencies
-# ============================================================================
-# Virtual environments
+# Python environments
+.venv/
 venv/
 env/
 ENV/
-.venv
-.env.local
-.env.*.local
+backend/venv/
 
-# Python cache
+# Python cache and builds
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
 build/
-develop-eggs/
 dist/
 downloads/
 eggs/
 .eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
 *.egg-info/
-.installed.cfg
 *.egg
 MANIFEST
-pip-log.txt
-pip-delete-this-directory.txt
 
-# Poetry & Pipenv
-poetry.lock
-Pipfile.lock
+# Local environment files
+.env
+.env.local
+.env.*.local
+.env.*.secret
+.env.lock
+backend/.env
 
-# pytest
-.pytest_cache/
-.coverage
-htmlcov/
-
-# ============================================================================
-# IDE & Editor Settings
-# ============================================================================
+# Editors and IDEs
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
-.DS_Store
-.env
-.env.*
-!.env.example
 *.sublime-project
 *.sublime-workspace
 
-# PyCharm
-.pycharm_helpers/
-.pytype/
-.dmypy.json
-dmypy.json
-
-# Vim
-[._]*.s[a-vz]
-[._]*.sw[a-p]
-[._]s[a-vz]
-[._]sw[a-p]
-
-# Nano
-.#*
-
-# ============================================================================
-# OS-specific Files
-# ============================================================================
-# Windows
+# Operating system files
+.DS_Store
 Thumbs.db
-*.lnk
-*.exe
 desktop.ini
-
-# macOS
+*.lnk
 .AppleDouble
 .LSOverride
 .Spotlight-V100
 .Trashes
 ._*
-.apdisk
-
-# Linux
-.trash*
 .directory
+.trash*
 
-# ============================================================================
-# Project-specific Exclusions
-# ============================================================================
-# Documentation (for internal use only)
+# Local documentation and experiments
 /docs/
+/experimentos/
 
-# ============================================================================
-# Application-specific
-# ============================================================================
-# Local database files
-*.db
-*.sqlite
-*.sqlite3
-*.dbm
-*.gdbm
-
-# Logs
-logs/
-*.log
-*.log.*
-
-# Temporary files
-tmp/
-temp/
-*.tmp
-*.bak
-*.backup
-*.cache
-
-# Model cache (LLM models can be large)
-ollama/
-models/
-*.onnx
-*.pb
-*.pth
-*.pt
-
-# Data files (large CSVs, datasets)
-# Ignore all CSVs in datasets folders (they're large and local)
+# Data files
 data/datasets/*/*.csv
 backend/data/datasets/*/*.csv
-
-# But ALLOW schema files (they're the structure)
 !data/datasets/
 !backend/data/datasets/
 !backend/metadata/datasets/
@@ -150,173 +66,82 @@ backend/data/datasets/*/*.csv
 !backend/metadata/datasets/*/*.json
 !metadata/datasets/*/*.json
 
-# OS lock files
-.env.lock
-npm-debug.log
-yarn-error.log
+# Logs and temporary files
+logs/
+*.log
+*.log.*
+tmp/
+temp/
+*.tmp
+*.bak
+*.backup
+*.old
+*.orig
+*.cache
 
-# ============================================================================
-# Docker & Containers
-# ============================================================================
-.dockerignore
-docker-compose.override.yml
-
-# Docker volumes (local)
-volumes/
-.docker/
-
-# ============================================================================
-# Development & Testing
-# ============================================================================
-.mypy_cache/
-.dmypy.json
-dmypy.json
-site/
+# Test and coverage outputs
 .pytest_cache/
-
-# Test coverage
+.mypy_cache/
+.pyre/
+.pytype/
 htmlcov/
 .coverage
 .coverage.*
-.cache
-nosetests.xml
 coverage.xml
+nosetests.xml
 *.cover
 .hypothesis/
 
-# Type checking
-.pyre/
-.pytype/
+# LaTeX build files
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.lof
+*.lot
+*.out
+*.synctex.gz
+*.toc
 
-# ============================================================================
-# Secrets & Sensitive Data
-# ============================================================================
-# Environment variables (local overrides)
-.env
-.env.*.local
-.env.*.secret
+# Docker local overrides and volumes
+docker-compose.override.yml
+volumes/
+.docker/
 
-# API keys & credentials
+# Local models and large binaries
+ollama/
+models/
+*.onnx
+*.pb
+*.pth
+*.pt
+
+# Secrets and credentials
 secrets/
 *.key
 *.pem
 *.crt
 *.csr
-
-# Configuration files with credentials (if any)
 config.local.yml
 config.local.yaml
 local_config.json
 
-# ============================================================================
-# Dependency & Build Management
-# ============================================================================
-# pip
-requirements-dev.txt.lock
-requirements.lock
-
-# mypy
-.dmypy.json
-
-# setuptools
-setup.cfg
-
-# ============================================================================
-# Compiled Files & Bytecode
-# ============================================================================
-*.o
-*.a
-*.so
-*.dylib
-*.dll
-
-# ============================================================================
-# IDE Generated Files Not Tracked
-# ============================================================================
-.vscode/settings.json
-.vscode/launch.json
-.vscode/extensions.json
-.vscode/*.code-snippets
-
-# ============================================================================
-# Root Level - Keep Essential Files
-# ============================================================================
-# Explicitly tracked (DO NOT ignore these):
-# - README.md
-# - SCALABILITY.md
-# - docker-compose.yml
-# - init.sql
-# - setup.sh / setup.ps1
-# - backend/requirements.txt
-# - .env.example (template only)
-
-# ============================================================================
-# Exclude venv from git (but let's be explicit about structure)
-# ============================================================================
-backend/venv/
-venv/
-.venv/
-
-# ============================================================================
-# CI/CD Generated Files
-# ============================================================================
-.github/workflows/**/logs/
-.gitlab-ci.yml.local
-.circleci/config.yml.local
-
-# ============================================================================
-# Python Type Hints & Stubs
-# ============================================================================
-*.pyi
-py.typed
-
-# ============================================================================
-# Jupyter & Notebook Artifacts
-# ============================================================================
+# Jupyter artifacts
 .ipynb_checkpoints/
 *.ipynb_checkpoints
 */.ipynb_checkpoints/*
 .jupyter/
 jupyter_notebook_config.py
 
-# ============================================================================
-# Documentation Build
-# ============================================================================
-site/
-docs/_build/
-.mkdocs.yml.local
-
-# ============================================================================
-# Backup Files
-# ============================================================================
-*.bak
-*.backup
-*.old
-*.orig
-*~
-
-# ============================================================================
-# Node/npm (if considering frontend)
-# ============================================================================
+# Node/frontend artifacts
 node_modules/
 npm-debug.log
 yarn-error.log
 .npmrc
 package-lock.json.local
 
-# ============================================================================
-# Local Development Tools
-# ============================================================================
+# Local tool settings
 .direnv
 .envrc
 .tool-versions
-
-# ============================================================================
-# Done! Safe to commit core files:
-# ============================================================================
-# ✓ backend/main.py, services/*, llm/*, db/*, etl/*, routes/*, metadata/
-# ✓ docker-compose.yml, init.sql
-# ✓ README.md, SCALABILITY.md
-# ✓ backend/requirements.txt, .env.example
-# ✓ All source code files (.py)
-# ✓ Data files: CSV files in backend/data/datasets/{dataset_name}/

@@ -10,14 +10,11 @@ from config.datasets import get_dataset_config
 logger = logging.getLogger(__name__)
 
 
-# ============================================================================
-# DETECÇÃO DE TIPO DE RESULTADO BASEADA NA PERGUNTA (NÃO NO RESULTADO)
-# ============================================================================
+# Classificação do tipo de resultado esperado.
 
 def _detect_result_type_from_question(question: str) -> str:
     """
-    Detecta o tipo de resultado esperado baseado em keywords na PERGUNTA.
-    Isso é muito mais confiável que tentar detectar pelo resultado em si.
+    Detecta o tipo de resultado esperado a partir da pergunta.
     
     Tipos retornados:
     - "simple": Pergunta por um número único (COUNT, SUM, AVG)
@@ -36,14 +33,14 @@ def _detect_result_type_from_question(question: str) -> str:
     """
     q_lower = question.lower()
     
-    # Padrão 1: PROPORÇÃO / RAZÃO
+    # Proporção ou razão.
     if any(pattern in q_lower for pattern in [
         'proporção', 'razao', 'razão', 'por cento', 'percentual', 'percentagem',
         '/', 'em relacao', 'relação', 'comparado com', 'versus', 'vs'
     ]):
         return "ratio"
     
-    # Padrão 2: DISTRIBUIÇÃO
+    # Distribuição.
     if any(pattern in q_lower for pattern in [
         'distribuição', 'distribuicao', 'como foi', 'qual é a distribuição',
         'de cada', 'entre', 'por sexo', 'por estado', 'por tipo', 'por faixa',
@@ -51,7 +48,7 @@ def _detect_result_type_from_question(question: str) -> str:
     ]):
         return "distribution"
     
-    # Padrão 3: RANKING / COMPARAÇÃO
+    # Ranking ou comparação.
     if any(pattern in q_lower for pattern in [
         'qual estado', 'qual município', 'qual tipo', 'qual fabricante',
         'qual estabelecimento', 'ranking', 'maior número', 'menor número',
@@ -60,7 +57,7 @@ def _detect_result_type_from_question(question: str) -> str:
     ]):
         return "ranking"
     
-    # Padrão 4: TEMPORAL / SÉRIE DE TEMPO
+    # Série temporal.
     if any(pattern in q_lower for pattern in [
         'evolução', 'ao longo', 'ao longo do', 'tendência', 'ao decorrer',
         'mensal', 'anual', 'por mês', 'por ano', 'por período',
@@ -69,7 +66,7 @@ def _detect_result_type_from_question(question: str) -> str:
     ]):
         return "temporal"
     
-    # Padrão 5: MULTI-DIMENSÃO (análise cruzada)
+    # Análise cruzada.
     if any(pattern in q_lower for pattern in [
         'em cada estado', 'de cada estado', 'por estado e', 'em cada',
         'de cada', 'cruzada', 'entre diferentes dimensões',
@@ -77,13 +74,13 @@ def _detect_result_type_from_question(question: str) -> str:
     ]):
         return "multi_dimension"
     
-    # Padrão 6: SIMPLES (quantidade total, SUM, AVG)
+    # Resultado simples.
     if any(pattern in q_lower for pattern in [
         'quantas', 'quantos', 'qual é o total', 'qual é a quantidade',
         'qual é a capacidade', 'qual é a média', 'total de', 'soma de',
         'no total', 'em total'
     ]):
-        # Se não matchou distribuição ou ranking, é simples
+        # Se não houve distribuição ou ranking, trata como simples.
         return "simple"
     
     return "unknown"
@@ -224,7 +221,7 @@ def _get_dataset_context(dataset: str) -> str:
         config = get_dataset_config(dataset)
         description = config.get("description", "")
         
-        # Carregar metadata para mais contexto
+        # Usa metadados para contextualizar a resposta.
         try:
             metadata = load_metadata(dataset)
             if metadata and "descricao" in metadata:
@@ -232,11 +229,11 @@ def _get_dataset_context(dataset: str) -> str:
         except:
             pass
         
-        # Contexto específico por dataset
+        # Contexto por dataset.
         if "covid" in dataset.lower() or "vacinacao" in dataset.lower():
             return f"""CONTEXTO DO DATASET: {description}
 
-IMPORTANTE:
+Observações:
 - Os resultados se referem a DOSES DE VACINA aplicadas (não pessoas)
 - Colunas importantes: paciente_endereco_uf (estado), paciente_enumSexoBiologico (F/M), 
   vacina_dataAplicacao (data), vacina_nome (marca), vacina_descricao_dose (1ª, 2ª, reforço)
@@ -246,7 +243,7 @@ IMPORTANTE:
         elif "leito" in dataset.lower():
             return f"""CONTEXTO DO DATASET: {description}
 
-IMPORTANTE:
+Observações:
 - Os resultados se referem a LEITOS HOSPITALARES (camas)
 - Colunas importantes: LEITOS_EXISTENTES (total de leitos), LEITOS_SUS (leitos públicos),
   UTI_TOTAL_EXIST, UTI_ADULTO_EXIST, UTI_PEDIATRICO_EXIST, UTI_NEONATAL_EXIST, etc
@@ -386,15 +383,15 @@ def interpret_result(
         error_str = str(e)
         logger.error(f"Erro ao interpretar resultado: {e}")
         
-        # Retornar fallback quando LLM falha
+        # Usa resumo factual se a LLM falhar.
         return factual_summary or _fallback_interpretation(result, question)
 
 
 def _build_interpretation_prompt(question: str, result_data: str, result_count: int, dataset_context: str, result_type: str = "unknown", result: list = None) -> str:
     """
-    Constrói prompt MUITO SIMPLES e direto para o LLM interpretar resultado.
+    Constrói o prompt usado para interpretar o resultado.
     
-    DeepSeek Coder funciona melhor com prompts curtos e diretos, sem muita formatação.
+    O prompt é mantido curto para reduzir respostas não fundamentadas.
     
     Args:
         question: Pergunta do usuário
@@ -408,17 +405,17 @@ def _build_interpretation_prompt(question: str, result_data: str, result_count: 
         Prompt estruturado mas simples
     """
     
-    # Detectar se é um número único
+    # Detecta resultado escalar.
     is_single_number = (
         result_count == 1 and 
         result and isinstance(result[0], (list, tuple)) and 
         len(result[0]) == 1
     )
     
-    # ESTRATÉGIA: Prompts separados e MUITO simples por tipo
+    # Usa prompts diferentes conforme o tipo de resultado.
     
     if is_single_number and result_type == "simple":
-        # Para números únicos: prompt EXTREMAMENTE simples
+        # Resultado escalar.
         number = result[0][0]
         return f"""Pergunta: {question}
 
