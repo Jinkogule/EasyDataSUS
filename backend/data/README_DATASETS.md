@@ -77,9 +77,9 @@ DOC-002;PAC-002;32;...
 
 | Dataset | Arquivo | Status | Registros |
 |---------|---------|--------|-----------|
-| `covid-19-vacinacao` | vacinacao-ac-es.csv | ✅ Ativo | 390.911+ |
-| `dengue-2024` | dengue-ac-es.csv | ⏳ Planejado | TBD |
-| `influenza-2025` | influenza-ac-es.csv | ⏳ Planejado | TBD |
+| `covid-19-vacinacao` | vacinacao-ac-es.csv | Ativo | 390.911+ |
+| `dengue-2024` | dengue-ac-es.csv | Planejado | TBD |
+| `influenza-2025` | influenza-ac-es.csv | Planejado | TBD |
 
 ## Tratamento de Erros
 
@@ -117,8 +117,8 @@ print(result)  # [824]
 ## Escalabilidade
 
 Esta estrutura permite:
-- ✅ Múltiplos datasets coexistindo
-- ✅ Fácil adição de novos datasets
-- ✅ TRUNCATE seletivo por dataset
-- ✅ Queries entre datasets por relacionamentos semânticos cadastrados
-- ✅ Versionamento de datasets (ex: dengue-2023, dengue-2024)
+- Múltiplos datasets coexistindo
+- Fácil adição de novos datasets
+- TRUNCATE seletivo por dataset
+- Queries entre datasets por relacionamentos semânticos cadastrados
+- Versionamento de datasets (ex: dengue-2023, dengue-2024)

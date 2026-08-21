@@ -16,11 +16,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-# ============================================================================
-# PERGUNTAS PRÉ-PRONTAS ASSOCIADAS A DATASETS
-# ============================================================================
-# Estrutura: cada pergunta está associada a um dataset específico
-# Isso permite roteamento automático e escalabilidade
+# Perguntas pré-prontas associadas a datasets.
 
 PREBUILT_QUESTIONS = {
     "covid-19-vacinacao": {
@@ -131,9 +127,7 @@ PREBUILT_QUESTIONS = {
     }
 }
 
-# ============================================================================
-# MODELOS PYDANTIC
-# ============================================================================
+# Modelos de resposta.
 
 class Question(BaseModel):
     """Modelo de uma pergunta pré-pronta"""
@@ -168,9 +162,7 @@ class QuestionRecommendation(BaseModel):
     reason: Optional[str] = None
 
 
-# ============================================================================
-# ENDPOINTS
-# ============================================================================
+# Endpoints.
 
 @router.get("/questions", response_model=QuestionsResponse, tags=["questions"])
 def list_all_questions(
@@ -303,7 +295,7 @@ def get_categories_by_dataset(dataset_id: str):
       "categories": [
         {
           "name": "Quantidade Total",
-          "icon": "📊",
+          "icon": "chart",
           "question_count": 1,
           "questions": [...]
         }
@@ -419,9 +411,7 @@ def detect_dataset_for_question(question: str = Query(..., description="Pergunta
     }
 
 
-# ============================================================================
-# FUNÇÃO AUXILIAR: DESCOBERTA AUTOMÁTICA DE DATASETS
-# ============================================================================
+# Descoberta de datasets.
 
 def discover_available_datasets() -> List[str]:
     """
